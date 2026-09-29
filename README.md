@@ -6,42 +6,52 @@ Named for the fence around AWS Device Farm (Boardman, OR), Google Play Robo /
 pre-launch fetchers, and Meta / Bing link-preview crawlers — traffic that looks
 like installs or visits but is never a real user.
 
-## Install
+**Status: experimental `0.x`.** Extracted from a real product and useful as
+dogfood, not yet a general-purpose bot filter. Prefer the install-path
+never-override helpers; treat broad IP helpers as soft signals and tune for
+your traffic before dropping users.
 
-Private dogfood (GitHub):
+## Install
 
 ```bash
 npm install github:zlu/farmfence#v0.1.0
-```
-
-Public npm (when published):
-
-```bash
-npm install farmfence
+# or, when published: npm install farmfence
 ```
 
 ## Usage
 
+Start with the install helpers — they combine IP, locale, geo, and funnel
+signals and are the safest defaults:
+
 ```ts
 import {
-  isLikelyBotIp,
-  isDatacenterCrawlerIp,
-  datacenterCrawlerReason,
   isLikelyBotInstallPayload,
   botInstallReason,
   isHumanLikeInstall,
 } from "farmfence";
 
-// Web / API request IP
-if (isDatacenterCrawlerIp(ip) || isLikelyBotIp(ip)) {
-  // drop or flag
-}
-
-// Mobile install / session payload (geo + locale + funnel events)
 if (isLikelyBotInstallPayload(payload)) {
+  // never-override farm / review traffic
   console.log(botInstallReason(payload));
 } else if (payload.likelyBot && !isHumanLikeInstall(payload)) {
-  // IP-only flag without human override
+  // broader Google/Apple IP flag without human override
+}
+```
+
+Web / IP-only checks are coarser and easier to misuse:
+
+```ts
+import {
+  isDatacenterCrawlerIp,
+  datacenterCrawlerReason,
+  isLikelyBotIp,
+} from "farmfence";
+
+// Soft signal — flag or sample, don't blindly drop
+if (isDatacenterCrawlerIp(ip)) {
+  console.log(datacenterCrawlerReason(ip));
+} else if (isLikelyBotIp(ip)) {
+  // coarse Google / Apple prefixes; many real users share these NATs
 }
 ```
 
@@ -49,14 +59,26 @@ if (isLikelyBotInstallPayload(payload)) {
 
 | Signal | Never overridden? |
 | --- | --- |
-| AWS us-west-2 / Boardman device farm | yes |
+| AWS us-west-2 / Boardman device farm | yes (install path) |
 | Google user-triggered fetcher + Play randomized locale (`en-SG`, …) | yes |
 | Google / Apple review-farm IP + locale↔TZ mismatch or OAuth cancel loop | yes (install path) |
 | Meta / Bing / AWS datacenter crawler IP | yes (web path) |
 | Broader Google infra IP alone | no — `isHumanLikeInstall` can clear |
 
-Payload fields are optional and shape-tolerant. Pass whatever you already store
-(`ip`, `language`, `timezoneOffsetMinutes`, `funnelEvents`, `region`, `city`, …).
+## Caveats
+
+- **`isDatacenterCrawlerIp` includes large AWS us-west-2 ranges**, not only
+  Device Farm. That footprint covers a lot of Oregon EC2 (VPNs, backends,
+  corporate egress). Same for coarse `isLikelyBotIp` Google / Apple prefixes —
+  use them as soft signals, not drop rules.
+- **Funnel event names are product-shaped** (`sign_in_canceled_google`,
+  reading-time fields, etc.). Other apps may only get IP / locale / geo signals
+  unless event names match or you adapt the helpers.
+- **CIDR lists are snapshots** and will go stale. Behavioral results can change
+  in `0.x` without an API break.
+- Payload fields are optional and shape-tolerant. Pass what you already store
+  (`ip`, `language`, `timezoneOffsetMinutes`, `funnelEvents`, `region`,
+  `city`, …). Prefer server-derived geo; client-supplied city/region is spoofable.
 
 ## License
 
