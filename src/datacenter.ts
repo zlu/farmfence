@@ -1,0 +1,63 @@
+import { isAwsUsWest2Ip } from "./install.js";
+
+/** IPv4 CIDR membership (dotted-quad only; IPv6/parse failures return false). */
+function ipv4InCidr(ip: string | null | undefined, cidr: string): boolean {
+  if (!ip) return false;
+  const [range, bitsRaw] = cidr.split("/");
+  const bits = Number(bitsRaw);
+  const toInt = (value: string): number | null => {
+    const octets = value.split(".").map(Number);
+    if (octets.length !== 4) return null;
+    if (octets.some((o) => !Number.isInteger(o) || o < 0 || o > 255)) return null;
+    return ((octets[0]! << 24) | (octets[1]! << 16) | (octets[2]! << 8) | octets[3]!) >>> 0;
+  };
+  const ipInt = toInt(ip.trim());
+  const rangeInt = range ? toInt(range) : null;
+  if (ipInt == null || rangeInt == null || !Number.isInteger(bits) || bits < 0 || bits > 32) {
+    return false;
+  }
+  const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;
+  return (ipInt & mask) === (rangeInt & mask);
+}
+
+/**
+ * Meta / Facebook (AS32934) datacenter egress — link-preview / link-safety
+ * crawlers. Real users never egress from these ranges.
+ */
+const META_DATACENTER_CIDRS = [
+  "66.220.144.0/20",
+  "31.13.24.0/21",
+  "31.13.64.0/18",
+  "173.252.64.0/18",
+  "69.63.176.0/20",
+  "69.171.224.0/19",
+  "204.15.20.0/22",
+];
+
+export function isMetaDatacenterIp(ip: string | null | undefined): boolean {
+  return META_DATACENTER_CIDRS.some((cidr) => ipv4InCidr(ip, cidr));
+}
+
+/** Bingbot crawler egress (Microsoft's documented crawler ranges). */
+const BINGBOT_CIDRS = ["40.77.0.0/16", "207.46.0.0/16", "157.55.0.0/16"];
+
+export function isBingbotIp(ip: string | null | undefined): boolean {
+  return BINGBOT_CIDRS.some((cidr) => ipv4InCidr(ip, cidr));
+}
+
+/**
+ * Datacenter crawler egress that can never belong to a residential user.
+ * Includes Meta/Facebook link-preview crawlers, Bingbot, and AWS us-west-2
+ * EC2 (Boardman, OR) headless browsers.
+ */
+export function isDatacenterCrawlerIp(ip: string | null | undefined): boolean {
+  return isMetaDatacenterIp(ip) || isBingbotIp(ip) || isAwsUsWest2Ip(ip);
+}
+
+/** Human-readable auto reason for datacenter crawler egress, or null. */
+export function datacenterCrawlerReason(ip: string | null | undefined): string | null {
+  if (isMetaDatacenterIp(ip)) return "Meta/Facebook datacenter IP";
+  if (isBingbotIp(ip)) return "Bingbot crawler IP";
+  if (isAwsUsWest2Ip(ip)) return "AWS us-west-2 datacenter IP (Boardman, OR)";
+  return null;
+}

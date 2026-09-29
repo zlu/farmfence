@@ -1,0 +1,54 @@
+{
+  "name": "farmfence",
+  "version": "0.1.0",
+  "description": "Exclude device-farm, review-farm, and crawler traffic from product analytics",
+  "license": "MIT",
+  "author": "zlu",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zlu/farmfence.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zlu/farmfence/issues"
+  },
+  "homepage": "https://github.com/zlu/farmfence#readme",
+  "keywords": [
+    "analytics",
+    "bot-detection",
+    "device-farm",
+    "crawler",
+    "privacy"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean",
+    "test": "tsx test/install.test.ts",
+    "prepublishOnly": "npm run build && npm test",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "tsup": "^8.4.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}
