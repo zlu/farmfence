@@ -2,9 +2,10 @@
 
 Exclude **device-farm**, **app-review**, and **crawler** traffic from product analytics.
 
-Named for the fence around AWS Device Farm (Boardman, OR), Google Play Robo /
-pre-launch fetchers, and Meta / Bing link-preview crawlers — traffic that looks
-like installs or visits but is never a real user.
+Named for the fence around AWS Device Farm (Boardman, OR), AWS us-east-1
+scrapers (Ashburn, VA), Google Play Robo / pre-launch fetchers, and Meta / Bing
+link-preview crawlers — traffic that looks like installs or visits but is never
+a real user.
 
 **Status: experimental `0.x`.** Extracted from a real product and useful as
 dogfood, not yet a general-purpose bot filter. Prefer the install-path
@@ -14,7 +15,7 @@ your traffic before dropping users.
 ## Install
 
 ```bash
-npm install github:zlu/farmfence#v0.1.0
+npm install github:zlu/farmfence#v0.1.1
 # or, when published: npm install farmfence
 ```
 
@@ -60,6 +61,7 @@ if (isDatacenterCrawlerIp(ip)) {
 | Signal | Never overridden? |
 | --- | --- |
 | AWS us-west-2 / Boardman device farm | yes (install path) |
+| AWS us-east-1 / Ashburn EC2 scrapers | yes (EC2 CIDR; not city alone) |
 | Google user-triggered fetcher + Play randomized locale (`en-SG`, …) | yes |
 | Google / Apple review-farm IP + locale↔TZ mismatch or OAuth cancel loop | yes (install path) |
 | Meta / Bing / AWS datacenter crawler IP | yes (web path) |
@@ -67,10 +69,12 @@ if (isDatacenterCrawlerIp(ip)) {
 
 ## Caveats
 
-- **`isDatacenterCrawlerIp` includes large AWS us-west-2 ranges**, not only
-  Device Farm. That footprint covers a lot of Oregon EC2 (VPNs, backends,
-  corporate egress). Same for coarse `isLikelyBotIp` Google / Apple prefixes —
-  use them as soft signals, not drop rules.
+- **`isDatacenterCrawlerIp` includes large AWS us-west-2 and us-east-1 EC2
+  ranges**, not only Device Farm / Facebook fetchers. That footprint covers a
+  lot of Oregon and Northern Virginia EC2 (VPNs, backends, corporate egress).
+  Same for coarse `isLikelyBotIp` Google / Apple prefixes — use them as soft
+  signals, not drop rules. **Ashburn city/region alone is never a bot signal**
+  (people live there); only EC2 CIDRs.
 - **Funnel event names are product-shaped** (`sign_in_canceled_google`,
   reading-time fields, etc.). Other apps may only get IP / locale / geo signals
   unless event names match or you adapt the helpers.

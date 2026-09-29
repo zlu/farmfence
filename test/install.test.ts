@@ -5,6 +5,7 @@
 import {
   botInstallReason,
   datacenterCrawlerReason,
+  isAwsUsEast1Ip,
   isAwsUsWest2Ip,
   isDatacenterCrawlerIp,
   isGoogleCrawlerIp,
@@ -185,6 +186,42 @@ assert(isDatacenterCrawlerIp(boardmanScraperIp), "Boardman EC2 is a datacenter c
 assert(
   datacenterCrawlerReason(boardmanScraperIp)?.includes("AWS us-west-2"),
   "Boardman EC2 datacenter reason",
+);
+assert(isAwsUsWest2Ip("34.209.152.138"), "34.208/12 Boardman EC2 is AWS us-west-2");
+assert(isAwsUsWest2Ip("32.185.237.157"), "32.184/13 Boardman EC2 is AWS us-west-2");
+
+const ashburnScraperIp = "54.85.77.52";
+assert(isAwsUsEast1Ip(ashburnScraperIp), "54.80/13 Ashburn EC2 is AWS us-east-1");
+assert(isAwsUsEast1Ip("3.239.33.69"), "3.224/12 Ashburn EC2 is AWS us-east-1");
+assert(isAwsUsEast1Ip("18.208.169.190"), "18.208/13 Ashburn EC2 is AWS us-east-1");
+assert(isDatacenterCrawlerIp(ashburnScraperIp), "Ashburn EC2 is a datacenter crawler");
+assert(
+  datacenterCrawlerReason(ashburnScraperIp)?.includes("Ashburn"),
+  "Ashburn EC2 datacenter reason",
+);
+const ashburnFarm = {
+  ip: ashburnScraperIp,
+  region: "VA",
+  city: "Ashburn",
+  language: "en-US@posix",
+  timezoneOffsetMinutes: 0,
+  totalReadingSeconds: 5000,
+};
+assert(isLikelyBotInstallPayload(ashburnFarm), "Ashburn EC2 scraper is never overridden");
+assert(
+  (botInstallReason(ashburnFarm) ?? "").includes("Ashburn"),
+  "Ashburn farm reason mentions Ashburn",
+);
+// Ashburn city alone (residential) must not flag — people live there.
+assert(
+  !isLikelyBotInstallPayload({
+    region: "VA",
+    city: "Ashburn",
+    language: "en-US",
+    timezoneOffsetMinutes: -240,
+    totalReadingSeconds: 60,
+  }),
+  "Ashburn residential geo alone is not a bot",
 );
 
 console.log("farmfence checks passed");

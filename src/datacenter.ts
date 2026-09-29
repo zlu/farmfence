@@ -1,4 +1,4 @@
-import { isAwsUsWest2Ip } from "./install.js";
+import { isAwsUsEast1Ip, isAwsUsWest2Ip } from "./install.js";
 
 /** IPv4 CIDR membership (dotted-quad only; IPv6/parse failures return false). */
 function ipv4InCidr(ip: string | null | undefined, cidr: string): boolean {
@@ -47,11 +47,17 @@ export function isBingbotIp(ip: string | null | undefined): boolean {
 
 /**
  * Datacenter crawler egress that can never belong to a residential user.
- * Includes Meta/Facebook link-preview crawlers, Bingbot, and AWS us-west-2
- * EC2 (Boardman, OR) headless browsers.
+ * Includes Meta/Facebook link-preview crawlers, Bingbot, and AWS EC2
+ * headless browsers (us-west-2 Boardman device farm, us-east-1 Ashburn
+ * scrapers / link fetchers).
  */
 export function isDatacenterCrawlerIp(ip: string | null | undefined): boolean {
-  return isMetaDatacenterIp(ip) || isBingbotIp(ip) || isAwsUsWest2Ip(ip);
+  return (
+    isMetaDatacenterIp(ip) ||
+    isBingbotIp(ip) ||
+    isAwsUsWest2Ip(ip) ||
+    isAwsUsEast1Ip(ip)
+  );
 }
 
 /** Human-readable auto reason for datacenter crawler egress, or null. */
@@ -59,5 +65,6 @@ export function datacenterCrawlerReason(ip: string | null | undefined): string |
   if (isMetaDatacenterIp(ip)) return "Meta/Facebook datacenter IP";
   if (isBingbotIp(ip)) return "Bingbot crawler IP";
   if (isAwsUsWest2Ip(ip)) return "AWS us-west-2 datacenter IP (Boardman, OR)";
+  if (isAwsUsEast1Ip(ip)) return "AWS us-east-1 datacenter IP (Ashburn, VA)";
   return null;
 }

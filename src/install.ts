@@ -5,7 +5,10 @@
  *    geo. No residential user egresses from Boardman EC2, so this is never
  *    overridden (UTC / scripted-tour corroboration is optional diagnostics only —
  *    modern farm images often ship with a US timezone and barely open the app).
- * 2. Google Play / Apple review farm: Googlebot/proxy (`66.249.x`), Google
+ * 2. AWS us-east-1 (Ashburn, VA) EC2 scrapers / link-preview fetchers (often
+ *    Facebook-adjacent). Real browsers never egress from EC2; Ashburn *city*
+ *    alone is not enough (people live there) — only EC2 CIDRs.
+ * 3. Google Play / Apple review farm: Googlebot/proxy (`66.249.x`), Google
  *    user-triggered fetchers (published CIDRs), and Google / Apple infra
  *    ranges. Corroborated by a Play-farm randomized locale (e.g. `en-SG`,
  *    `en-JM` — rotated independently of the device timezone), a
@@ -19,6 +22,8 @@
 
 /** AWS us-west-2 (Boardman, OR) egress ranges, from AWS ip-ranges.json. */
 const AWS_US_WEST_2_CIDRS = [
+  "32.184.0.0/13",
+  "34.208.0.0/12",
   "35.80.0.0/12",
   "35.160.0.0/13",
   "44.224.0.0/11",
@@ -33,6 +38,42 @@ const AWS_US_WEST_2_CIDRS = [
   "54.218.0.0/15",
   "54.244.0.0/16",
   "54.245.0.0/16",
+];
+
+/**
+ * AWS us-east-1 (Ashburn, VA) EC2 ranges — broad prefixes (≤/14) from
+ * ip-ranges.json. Used for web scrapers / headless link fetchers; not for
+ * Ashburn residential geo alone.
+ */
+const AWS_US_EAST_1_CIDRS = [
+  "3.80.0.0/12",
+  "3.208.0.0/12",
+  "3.224.0.0/12",
+  "13.216.0.0/13",
+  "18.204.0.0/14",
+  "18.208.0.0/13",
+  "18.232.0.0/14",
+  "23.20.0.0/14",
+  "32.192.0.0/13",
+  "32.200.0.0/13",
+  "34.192.0.0/12",
+  "34.224.0.0/12",
+  "35.168.0.0/13",
+  "44.192.0.0/11",
+  "52.4.0.0/14",
+  "52.20.0.0/14",
+  "52.200.0.0/13",
+  "54.80.0.0/13",
+  "54.88.0.0/14",
+  "54.144.0.0/14",
+  "54.156.0.0/14",
+  "54.160.0.0/13",
+  "98.80.0.0/13",
+  "98.88.0.0/13",
+  "100.24.0.0/13",
+  "100.48.0.0/12",
+  "107.20.0.0/14",
+  "184.192.0.0/12",
 ];
 
 function parseIpv4(ip: string): number | null {
@@ -113,6 +154,11 @@ export function isAwsUsWest2Ip(ip: string | null | undefined): boolean {
   return AWS_US_WEST_2_CIDRS.some((cidr) => ipInCidr(ip, cidr));
 }
 
+/** AWS us-east-1 (Ashburn, VA) EC2 — scraper / link-preview egress region. */
+export function isAwsUsEast1Ip(ip: string | null | undefined): boolean {
+  return AWS_US_EAST_1_CIDRS.some((cidr) => ipInCidr(ip, cidr));
+}
+
 const SCRIPTED_FEATURE_EVENTS_MIN = 4;
 const SCRIPTED_FEATURE_SPAN_MS = 100;
 
@@ -152,6 +198,7 @@ function featureBurstStats(payload: Record<string, unknown>): FeatureBurst | nul
 
 type InstallBotSignals = {
   awsUsWest2: boolean;
+  awsUsEast1: boolean;
   utcOffset: boolean;
   burst: FeatureBurst | null;
 };
@@ -164,23 +211,26 @@ function installBotSignals(payload: Record<string, unknown>): InstallBotSignals 
       isAwsUsWest2Ip(ip) ||
       isAwsUsWest2Ip(firstIp) ||
       // Vercel geo label for those ranges (server-derived, not client-spoofable).
+      // Boardman is essentially only AWS Device Farm — geo alone is safe.
       (typeof payload.region === "string" &&
         payload.region.trim().toUpperCase() === "OR" &&
         typeof payload.city === "string" &&
         payload.city.trim().toLowerCase().startsWith("boardman")),
+    // Ashburn has residents — never use city/region alone; EC2 CIDRs only.
+    awsUsEast1: isAwsUsEast1Ip(ip) || isAwsUsEast1Ip(firstIp),
     utcOffset: payload.timezoneOffsetMinutes === 0,
     burst: featureBurstStats(payload),
   };
 }
 
 /**
- * Never-overridden farm/crawler install: AWS us-west-2 device farm, or a
- * Google user-triggered fetcher IP with a Play-farm randomized locale
+ * Never-overridden farm/crawler install: AWS device-farm / Ashburn EC2 scrapers,
+ * or a Google user-triggered fetcher IP with a Play-farm randomized locale
  * (`en-SG`, `en-JM`, …). Idle reading does not clear these.
  */
 export function isLikelyBotInstallPayload(payload: Record<string, unknown>): boolean {
   const signals = installBotSignals(payload);
-  if (signals.awsUsWest2) return true;
+  if (signals.awsUsWest2 || signals.awsUsEast1) return true;
   const play = playCrawlerSignals(payload);
   return Boolean(play?.userTriggeredFetcher && play.randomizedLocale);
 }
@@ -193,6 +243,14 @@ export function botInstallReason(payload: Record<string, unknown>): string | nul
   const signals = installBotSignals(payload);
   if (signals.awsUsWest2) {
     const parts = ["AWS us-west-2 datacenter IP (Boardman, OR)"];
+    if (signals.utcOffset) parts.push("UTC timezone");
+    if (signals.burst) {
+      parts.push(`${signals.burst.count} feature events in ${signals.burst.spanMs}ms`);
+    }
+    return parts.join(" · ");
+  }
+  if (signals.awsUsEast1) {
+    const parts = ["AWS us-east-1 datacenter IP (Ashburn, VA)"];
     if (signals.utcOffset) parts.push("UTC timezone");
     if (signals.burst) {
       parts.push(`${signals.burst.count} feature events in ${signals.burst.spanMs}ms`);

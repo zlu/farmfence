@@ -1,6 +1,7 @@
 export {
   botInstallReason,
   formatUtcOffsetLabel,
+  isAwsUsEast1Ip,
   isAwsUsWest2Ip,
   isGoogleCrawlerIp,
   isGoogleUserTriggeredFetcherIp,
