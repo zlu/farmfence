@@ -1,6 +1,6 @@
 {
   "name": "farmfence",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Exclude device-farm, review-farm, and crawler traffic from product analytics",
   "license": "MIT",
   "author": "zlu",
@@ -38,7 +38,7 @@
   ],
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --clean",
-    "test": "tsx test/install.test.ts",
+    "test": "tsx test/install.test.ts && tsx test/web.test.ts",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build && npm test",
     "typecheck": "tsc --noEmit"

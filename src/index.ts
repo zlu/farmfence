@@ -19,3 +19,10 @@ export {
   isDatacenterCrawlerIp,
   isMetaDatacenterIp,
 } from "./datacenter.js";
+
+export {
+  datacenterHeadlessProbeReason,
+  isDatacenterHeadlessProbePayload,
+  isShallowWebProbePayload,
+  type WebProbeOptions,
+} from "./web.js";

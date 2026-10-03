@@ -15,8 +15,8 @@ your traffic before dropping users.
 ## Install
 
 ```bash
-npm install github:zlu/farmfence#v0.1.1
-# or, when published: npm install farmfence
+npm install farmfence
+# or pin a GitHub tag: npm install github:zlu/farmfence#v0.1.2
 ```
 
 ## Usage
@@ -46,6 +46,8 @@ import {
   isDatacenterCrawlerIp,
   datacenterCrawlerReason,
   isLikelyBotIp,
+  isDatacenterHeadlessProbePayload,
+  datacenterHeadlessProbeReason,
 } from "farmfence";
 
 // Soft signal — flag or sample, don't blindly drop
@@ -53,6 +55,11 @@ if (isDatacenterCrawlerIp(ip)) {
   console.log(datacenterCrawlerReason(ip));
 } else if (isLikelyBotIp(ip)) {
   // coarse Google / Apple prefixes; many real users share these NATs
+}
+
+// Spaced headless probes (single payload — keep burst clustering in the app)
+if (isDatacenterHeadlessProbePayload(payload)) {
+  console.log(datacenterHeadlessProbeReason(payload));
 }
 ```
 
@@ -65,6 +72,7 @@ if (isDatacenterCrawlerIp(ip)) {
 | Google user-triggered fetcher + Play randomized locale (`en-SG`, …) | yes |
 | Google / Apple review-farm IP + locale↔TZ mismatch or OAuth cancel loop | yes (install path) |
 | Meta / Bing / AWS datacenter crawler IP | yes (web path) |
+| Web headless probes (`Etc/Unknown`, `@posix`, UTC+800×600, Boardman city, KR UTC English) | yes when shallow |
 | Broader Google infra IP alone | no — `isHumanLikeInstall` can clear |
 
 ## Caveats
@@ -74,10 +82,14 @@ if (isDatacenterCrawlerIp(ip)) {
   lot of Oregon and Northern Virginia EC2 (VPNs, backends, corporate egress).
   Same for coarse `isLikelyBotIp` Google / Apple prefixes — use them as soft
   signals, not drop rules. **Ashburn city/region alone is never a bot signal**
-  (people live there); only EC2 CIDRs.
+  (people live there); only EC2 CIDRs, or Ashburn + UTC/headless/POSIX
+  corroboration on the web probe helper. **Boardman / The Dalles city +
+  shallow visit** is a bot signal (no residential web egress). Same-IP /
+  same-UA burst clustering stays in the app — it needs a window of rows.
 - **Funnel event names are product-shaped** (`sign_in_canceled_google`,
   reading-time fields, etc.). Other apps may only get IP / locale / geo signals
-  unless event names match or you adapt the helpers.
+  unless event names match or you adapt the helpers. Pass `opts.isShallow`
+  from your own funnel-aware shallow check when needed.
 - **CIDR lists are snapshots** and will go stale. Behavioral results can change
   in `0.x` without an API break.
 - Payload fields are optional and shape-tolerant. Pass what you already store
