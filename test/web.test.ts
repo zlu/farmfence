@@ -219,6 +219,7 @@ assert(
 
 assert(isNearSquareDesktopProbeScreen(1261, 1160), "1261x1160 is near-square probe");
 assert(isNearSquareDesktopProbeScreen(1397, 1254), "1397x1254 is near-square probe");
+assert(isNearSquareDesktopProbeScreen(1205, 1039), "1205x1039 is near-square probe");
 assert(!isNearSquareDesktopProbeScreen(1920, 1080), "1920x1080 is a real desktop");
 assert(!isNearSquareDesktopProbeScreen(1512, 982), "MacBook 1512x982 is real");
 

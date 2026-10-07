@@ -207,7 +207,7 @@ export function isNearSquareDesktopProbeScreen(
   const w = Math.floor(width);
   const h = Math.floor(height);
   if (w < 1150 || w > 1500) return false;
-  if (h < 1050 || h > 1350) return false;
+  if (h < 1000 || h > 1350) return false;
   if (Math.abs(w - h) > 220) return false;
   if (COMMON_DESKTOP_SCREENS.has(`${w}x${h}`)) return false;
   return true;
