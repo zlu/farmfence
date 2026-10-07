@@ -1,6 +1,6 @@
 {
   "name": "farmfence",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Exclude device-farm, review-farm, and crawler traffic from product analytics",
   "license": "MIT",
   "author": "zlu",

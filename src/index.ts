@@ -18,11 +18,15 @@ export {
   isBingbotIp,
   isDatacenterCrawlerIp,
   isMetaDatacenterIp,
+  isTencentCloudIp,
 } from "./datacenter.js";
 
 export {
+  cloudLocaleProbeReason,
   datacenterHeadlessProbeReason,
+  isCloudLocaleProbePayload,
   isDatacenterHeadlessProbePayload,
+  isNearSquareDesktopProbeScreen,
   isShallowWebProbePayload,
   type WebProbeOptions,
 } from "./web.js";

@@ -1,22 +1,50 @@
 /**
- * Web-session datacenter headless probes.
+ * Web-session datacenter headless probes + cloud locale scrapers.
  *
  * Single-payload tells for spaced farms that rotate IPs slower than a
  * same-IP burst window (Saginaw Level3, Council Bluffs GCP, Ashburn EC2
- * with POSIX locales, Boardman device-farm geo, Anyang-si UTC English).
+ * with POSIX locales, Boardman device-farm geo, Anyang-si UTC English,
+ * zh-CN desktop scrapers on Tencent/Aceville egress).
  *
  * Requires a shallow / low-usage visit. Does not cover cross-visitor
  * burst clustering — that needs a window of rows and stays in the app.
  *
  * Ashburn *city* alone is never a signal (people live there); only
  * Boardman / The Dalles city, or Ashburn+UTC/headless corroboration.
+ * zh-CN alone is never a signal (diaspora / VPN users).
  */
+
+import { isTencentCloudIp } from "./datacenter.js";
 
 const HEADLESS_PROBE_SCREENS = new Set([
   "800x600",
   "1280x720",
   "600x800",
   "1024x768",
+]);
+
+/** Common real desktop / laptop screen sizes — never treat as randomized. */
+const COMMON_DESKTOP_SCREENS = new Set([
+  "1280x720",
+  "1280x800",
+  "1366x768",
+  "1440x900",
+  "1512x982",
+  "1536x864",
+  "1680x1050",
+  "1728x1117",
+  "1792x1120",
+  "1800x1169",
+  "1920x1080",
+  "1920x1200",
+  "2048x1152",
+  "2560x1440",
+  "2560x1600",
+  "2880x1800",
+  "3008x1692",
+  "3024x1964",
+  "3456x2234",
+  "3840x2160",
 ]);
 
 /** Cloud-region cities that are never residential web egress. */
@@ -163,4 +191,90 @@ export function isDatacenterHeadlessProbePayload(
   opts?: WebProbeOptions,
 ): boolean {
   return datacenterHeadlessProbeReason(payload, opts) != null;
+}
+
+/**
+ * Randomized near-square desktop "screen" — typical of headless scrapers
+ * that spoof window.screen to odd sizes (e.g. 1261×1160) instead of a
+ * real display. Real monitors almost never land in this band.
+ */
+export function isNearSquareDesktopProbeScreen(
+  width: unknown,
+  height: unknown,
+): boolean {
+  if (typeof width !== "number" || typeof height !== "number") return false;
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return false;
+  const w = Math.floor(width);
+  const h = Math.floor(height);
+  if (w < 1150 || w > 1500) return false;
+  if (h < 1050 || h > 1350) return false;
+  if (Math.abs(w - h) > 220) return false;
+  if (COMMON_DESKTOP_SCREENS.has(`${w}x${h}`)) return false;
+  return true;
+}
+
+function isDesktopBrowserUa(ua: string): boolean {
+  if (!ua) return false;
+  if (/Mobile|Android|iPhone|iPad|iPod/i.test(ua)) return false;
+  return /Windows NT|Macintosh|X11; (?:Ubuntu|Linux|CrOS)/i.test(ua);
+}
+
+/**
+ * Spaced zh-CN (etc.) desktop cloud scrapers: fixed Chinese locale, shallow
+ * bounce, randomized near-square screen and/or Tencent Cloud egress.
+ * Geo+timezone are often spoofed to match the exit country, so mismatch is
+ * not required. Never flags on language alone.
+ */
+export function cloudLocaleProbeReason(
+  payload: Record<string, unknown>,
+  opts?: WebProbeOptions,
+): string | null {
+  const shallow =
+    typeof opts?.isShallow === "boolean"
+      ? opts.isShallow
+      : isShallowWebProbePayload(payload);
+  if (!shallow) return null;
+
+  const usage =
+    typeof payload.totalUsageSeconds === "number" ? payload.totalUsageSeconds : 0;
+  if (usage > 15) return null;
+
+  const lang = typeof payload.language === "string" ? payload.language : "";
+  if (!/^zh\b/i.test(lang)) return null;
+
+  const ua = typeof payload.userAgent === "string" ? payload.userAgent : "";
+  const sw = payload.screenWidth;
+  const sh = payload.screenHeight;
+  const desktopUa = isDesktopBrowserUa(ua);
+  const desktopSized =
+    typeof sw === "number" &&
+    typeof sh === "number" &&
+    sw >= 1024 &&
+    sh >= 768;
+  if (!desktopUa && !(ua === "" && desktopSized)) return null;
+
+  const nearSquare = isNearSquareDesktopProbeScreen(sw, sh);
+  const ip = typeof payload.ip === "string" ? payload.ip : null;
+  const tencent = isTencentCloudIp(ip);
+
+  if (nearSquare) {
+    return tencent
+      ? "zh desktop cloud locale probe (near-square screen + Tencent egress)"
+      : "zh desktop cloud locale probe (near-square screen)";
+  }
+
+  // Common screen (e.g. 1920×1080) still botty when zh + shallow desktop
+  // + Tencent/Aceville egress — the Oct 2026 SEO scrape farm used both.
+  if (tencent && desktopSized) {
+    return "zh desktop cloud locale probe (Tencent egress)";
+  }
+
+  return null;
+}
+
+export function isCloudLocaleProbePayload(
+  payload: Record<string, unknown>,
+  opts?: WebProbeOptions,
+): boolean {
+  return cloudLocaleProbeReason(payload, opts) != null;
 }

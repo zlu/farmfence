@@ -68,3 +68,29 @@ export function datacenterCrawlerReason(ip: string | null | undefined): string |
   if (isAwsUsEast1Ip(ip)) return "AWS us-east-1 datacenter IP (Ashburn, VA)";
   return null;
 }
+
+/**
+ * Tencent Cloud / Aceville (AS132203) hosting egress — HK/SG/CN cloud VMs.
+ * Soft signal only: real Chinese users and CDNs can share these ranges.
+ * Use as corroboration in combo detectors, not as a never-override drop.
+ */
+const TENCENT_CLOUD_CIDRS = [
+  "1.12.0.0/14",
+  "43.128.0.0/13", // Aceville 43.128–43.135 (HK/SG)
+  "43.152.0.0/14", // 43.152–43.155
+  "43.160.0.0/12", // Aceville edge 43.160–43.175 (incl. US POP)
+  "49.51.0.0/16",
+  "49.232.0.0/14", // Beijing Tencent
+  "101.32.0.0/16",
+  "110.238.0.0/16",
+  "119.8.0.0/16",
+  "119.28.0.0/16",
+  "129.226.0.0/16",
+  "150.40.0.0/16",
+  "150.109.0.0/16",
+  "162.14.0.0/16",
+];
+
+export function isTencentCloudIp(ip: string | null | undefined): boolean {
+  return TENCENT_CLOUD_CIDRS.some((cidr) => ipv4InCidr(ip, cidr));
+}

@@ -1,9 +1,13 @@
 /**
  * Run: npx tsx test/web.test.ts
  */
+import { isTencentCloudIp } from "../src/datacenter.js";
 import {
+  cloudLocaleProbeReason,
   datacenterHeadlessProbeReason,
+  isCloudLocaleProbePayload,
   isDatacenterHeadlessProbePayload,
+  isNearSquareDesktopProbeScreen,
   isShallowWebProbePayload,
 } from "../src/web.js";
 
@@ -209,6 +213,145 @@ assert(
     { isShallow: false },
   ) == null,
   "opts.isShallow false skips the probe",
+);
+
+// --- cloud locale (zh-CN desktop scrapers) ---
+
+assert(isNearSquareDesktopProbeScreen(1261, 1160), "1261x1160 is near-square probe");
+assert(isNearSquareDesktopProbeScreen(1397, 1254), "1397x1254 is near-square probe");
+assert(!isNearSquareDesktopProbeScreen(1920, 1080), "1920x1080 is a real desktop");
+assert(!isNearSquareDesktopProbeScreen(1512, 982), "MacBook 1512x982 is real");
+
+assert(isTencentCloudIp("43.134.117.10"), "Aceville SG is Tencent");
+assert(isTencentCloudIp("43.135.33.1"), "Aceville HK is Tencent");
+assert(isTencentCloudIp("49.232.32.8"), "Beijing Tencent");
+assert(!isTencentCloudIp("8.8.8.8"), "Google DNS is not Tencent");
+
+assert(
+  isCloudLocaleProbePayload({
+    ip: "43.134.117.10",
+    country: "SG",
+    city: "Singapore",
+    language: "zh-CN",
+    timezone: "Asia/Singapore",
+    timezoneOffsetMinutes: 480,
+    screenWidth: 1383,
+    screenHeight: 1227,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["book_detail_opened", "app_nudge_shown"],
+    entryPath: "/pathway/world_voices",
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+  }),
+  "zh-CN near-square Mac on Tencent SG should flag",
+);
+
+assert(
+  isCloudLocaleProbePayload({
+    ip: "149.232.143.10",
+    country: "MX",
+    city: "Mexico City",
+    language: "zh-CN",
+    timezone: "America/Mexico_City",
+    timezoneOffsetMinutes: -360,
+    screenWidth: 1397,
+    screenHeight: 1254,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["book_detail_opened"],
+    entryPath: "/discover/short_fiction_8_se?q=fiction",
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+  }),
+  "zh-CN near-square Win from MX geo should flag without Tencent IP",
+);
+
+assert(
+  isCloudLocaleProbePayload({
+    ip: "43.135.33.10",
+    country: "US",
+    city: "Santa Clara",
+    language: "zh-CN",
+    timezone: "America/Los_Angeles",
+    screenWidth: 1920,
+    screenHeight: 1080,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["book_detail_opened"],
+    entryPath: "/discover/candide_fr?q=fiction",
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+  }),
+  "zh-CN + Tencent + common 1920x1080 shallow desktop should flag",
+);
+
+assert(
+  !isCloudLocaleProbePayload({
+    ip: "203.0.113.10",
+    country: "CN",
+    city: "Shanghai",
+    language: "zh-CN",
+    timezone: "Asia/Shanghai",
+    screenWidth: 1512,
+    screenHeight: 982,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["home_viewed"],
+    entryPath: "/",
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  }),
+  "Real zh-CN MacBook bounce must not flag",
+);
+
+assert(
+  !isCloudLocaleProbePayload({
+    ip: "43.134.117.10",
+    country: "SG",
+    language: "zh-CN",
+    timezone: "Asia/Singapore",
+    screenWidth: 1383,
+    screenHeight: 1227,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["login_completed"],
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+  }),
+  "Engaged zh visitor must not flag",
+);
+
+assert(
+  !isCloudLocaleProbePayload({
+    ip: "43.134.117.10",
+    country: "SG",
+    language: "en-US",
+    timezone: "Asia/Singapore",
+    screenWidth: 1383,
+    screenHeight: 1227,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["home_viewed"],
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+  }),
+  "en-US must not match cloud locale probe",
+);
+
+assert(
+  cloudLocaleProbeReason(
+    {
+      language: "zh-CN",
+      screenWidth: 1261,
+      screenHeight: 1160,
+      pageViewCount: 5,
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    },
+    { isShallow: true },
+  ) != null,
+  "opts.isShallow override works for cloud locale probe",
 );
 
 console.log("farmfence web probe checks passed");

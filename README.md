@@ -48,6 +48,9 @@ import {
   isLikelyBotIp,
   isDatacenterHeadlessProbePayload,
   datacenterHeadlessProbeReason,
+  isCloudLocaleProbePayload,
+  cloudLocaleProbeReason,
+  isTencentCloudIp,
 } from "farmfence";
 
 // Soft signal — flag or sample, don't blindly drop
@@ -60,6 +63,14 @@ if (isDatacenterCrawlerIp(ip)) {
 // Spaced headless probes (single payload — keep burst clustering in the app)
 if (isDatacenterHeadlessProbePayload(payload)) {
   console.log(datacenterHeadlessProbeReason(payload));
+} else if (isCloudLocaleProbePayload(payload)) {
+  // zh-CN desktop scrapers (near-square screen and/or Tencent egress)
+  console.log(cloudLocaleProbeReason(payload));
+}
+
+// Soft only — never drop on Tencent Cloud IP alone
+if (isTencentCloudIp(ip)) {
+  // corroboration for combo detectors
 }
 ```
 
@@ -73,7 +84,9 @@ if (isDatacenterHeadlessProbePayload(payload)) {
 | Google / Apple review-farm IP + locale↔TZ mismatch or OAuth cancel loop | yes (install path) |
 | Meta / Bing / AWS datacenter crawler IP | yes (web path) |
 | Web headless probes (`Etc/Unknown`, `@posix`, UTC+800×600, Boardman city, KR UTC English) | yes when shallow |
+| Web zh desktop cloud locale probes (near-square screen and/or Tencent/Aceville + shallow) | yes when shallow |
 | Broader Google infra IP alone | no — `isHumanLikeInstall` can clear |
+| Tencent Cloud IP alone | no — soft corroboration only |
 
 ## Caveats
 
@@ -83,9 +96,12 @@ if (isDatacenterHeadlessProbePayload(payload)) {
   Same for coarse `isLikelyBotIp` Google / Apple prefixes — use them as soft
   signals, not drop rules. **Ashburn city/region alone is never a bot signal**
   (people live there); only EC2 CIDRs, or Ashburn + UTC/headless/POSIX
-  corroboration on the web probe helper. **Boardman / The Dalles city +
-  shallow visit** is a bot signal (no residential web egress). Same-IP /
-  same-UA burst clustering stays in the app — it needs a window of rows.
+  corroboration on the web probe helper. **  Boardman / The Dalles city +
+  shallow visit** is a bot signal (no residential web egress). **zh-CN alone
+  is never a bot signal** (diaspora / VPN); only shallow desktop +
+  near-square randomized screen and/or Tencent/Aceville corroboration.
+  Same-IP / same-UA burst clustering stays in the app — it needs a window
+  of rows.
 - **Funnel event names are product-shaped** (`sign_in_canceled_google`,
   reading-time fields, etc.). Other apps may only get IP / locale / geo signals
   unless event names match or you adapt the helpers. Pass `opts.isShallow`
