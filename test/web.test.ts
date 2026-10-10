@@ -1,7 +1,11 @@
 /**
  * Run: npx tsx test/web.test.ts
  */
-import { isTencentCloudIp } from "../src/datacenter.js";
+import {
+  isCnCloudHostingIp,
+  isHuaweiCloudIp,
+  isTencentCloudIp,
+} from "../src/datacenter.js";
 import {
   cloudLocaleProbeReason,
   datacenterHeadlessProbeReason,
@@ -226,7 +230,12 @@ assert(!isNearSquareDesktopProbeScreen(1512, 982), "MacBook 1512x982 is real");
 assert(isTencentCloudIp("43.134.117.10"), "Aceville SG is Tencent");
 assert(isTencentCloudIp("43.135.33.1"), "Aceville HK is Tencent");
 assert(isTencentCloudIp("49.232.32.8"), "Beijing Tencent");
+assert(isTencentCloudIp("152.136.228.208"), "TENCENT-CN Beijing 152.136/16");
 assert(!isTencentCloudIp("8.8.8.8"), "Google DNS is not Tencent");
+assert(isHuaweiCloudIp("113.44.120.122"), "Huawei Cloud Beijing ECS");
+assert(isCnCloudHostingIp("113.44.120.122"), "Huawei counts as CN cloud");
+assert(isCnCloudHostingIp("43.135.0.3"), "Aceville counts as CN cloud");
+assert(!isHuaweiCloudIp("8.8.8.8"), "Google DNS is not Huawei");
 
 assert(
   isCloudLocaleProbePayload({
@@ -285,6 +294,51 @@ assert(
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
   }),
   "zh-CN + Tencent + common 1920x1080 shallow desktop should flag",
+);
+
+assert(
+  isCloudLocaleProbePayload({
+    ip: "152.136.228.208",
+    country: "CN",
+    city: "Beijing",
+    language: "zh-CN",
+    timezone: "Asia/Shanghai",
+    screenWidth: 1920,
+    screenHeight: 1080,
+    pageViewCount: 2,
+    totalUsageSeconds: 3,
+    funnelReached: [
+      "discover_opened",
+      "discover_search_submitted:Adultery -- Fiction",
+    ],
+    entryPath: "/discover",
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+  }),
+  "zh-CN + TENCENT-CN 152.136 + LCSH subject search should flag",
+);
+
+assert(
+  isCloudLocaleProbePayload({
+    ip: "152.136.228.208",
+    country: "CN",
+    language: "zh-CN",
+    screenWidth: 1920,
+    screenHeight: 1080,
+    pageViewCount: 2,
+    totalUsageSeconds: 4,
+    funnelReached: [
+      "discover_opened",
+      "discover_search_submitted:Adultery -- Fiction",
+      "discover_search_results_0:Adultery -- Fiction",
+      "discover_search_submitted:Marriage -- Fiction",
+      "discover_search_results_1_5:Marriage -- Fiction",
+    ],
+    entryPath: "/discover",
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+  }),
+  "multiple LCSH search milestones must not evade shallow+Tencent probe",
 );
 
 assert(

@@ -16,7 +16,9 @@ export {
 export {
   datacenterCrawlerReason,
   isBingbotIp,
+  isCnCloudHostingIp,
   isDatacenterCrawlerIp,
+  isHuaweiCloudIp,
   isMetaDatacenterIp,
   isTencentCloudIp,
 } from "./datacenter.js";

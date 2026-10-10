@@ -14,7 +14,7 @@
  * zh-CN alone is never a signal (diaspora / VPN users).
  */
 
-import { isTencentCloudIp } from "./datacenter.js";
+import { isCnCloudHostingIp, isHuaweiCloudIp, isTencentCloudIp } from "./datacenter.js";
 
 const HEADLESS_PROBE_SCREENS = new Set([
   "800x600",
@@ -87,6 +87,21 @@ export type WebProbeOptions = {
  * Generic shallow bounce — safe default when the app does not pass its
  * own funnel-aware shallow predicate.
  */
+/**
+ * Per-query search milestones + automatic Discover chrome are noise for the
+ * shallow cap — LCSH subject scrapers emit them without becoming readers.
+ */
+function isSearchNoiseMilestone(name: string): boolean {
+  return (
+    name.startsWith("discover_search_") ||
+    name.startsWith("track_search_") ||
+    name === "discover_search" ||
+    name === "feature_discover_search" ||
+    name === "feature_track_search" ||
+    name === "app_nudge_shown"
+  );
+}
+
 export function isShallowWebProbePayload(
   payload: Record<string, unknown>,
 ): boolean {
@@ -100,7 +115,8 @@ export function isShallowWebProbePayload(
     (n) =>
       typeof n === "string" &&
       n !== "page_view" &&
-      !String(n).startsWith("cta_"),
+      !n.startsWith("cta_") &&
+      !isSearchNoiseMilestone(n),
   );
   if (milestones.length > 2) return false;
   if (milestones.some((n) => ENGAGED_MILESTONE_HINTS.has(String(n)))) return false;
@@ -221,9 +237,9 @@ function isDesktopBrowserUa(ua: string): boolean {
 
 /**
  * Spaced zh-CN (etc.) desktop cloud scrapers: fixed Chinese locale, shallow
- * bounce, randomized near-square screen and/or Tencent Cloud egress.
- * Geo+timezone are often spoofed to match the exit country, so mismatch is
- * not required. Never flags on language alone.
+ * bounce, randomized near-square screen and/or CN cloud egress
+ * (Tencent / Huawei). Geo+timezone are often spoofed to match the exit
+ * country, so mismatch is not required. Never flags on language alone.
  */
 export function cloudLocaleProbeReason(
   payload: Record<string, unknown>,
@@ -256,17 +272,20 @@ export function cloudLocaleProbeReason(
   const nearSquare = isNearSquareDesktopProbeScreen(sw, sh);
   const ip = typeof payload.ip === "string" ? payload.ip : null;
   const tencent = isTencentCloudIp(ip);
+  const huawei = isHuaweiCloudIp(ip);
+  const cnCloud = isCnCloudHostingIp(ip);
+  const cloudLabel = tencent ? "Tencent" : huawei ? "Huawei" : null;
 
   if (nearSquare) {
-    return tencent
-      ? "zh desktop cloud locale probe (near-square screen + Tencent egress)"
+    return cloudLabel
+      ? `zh desktop cloud locale probe (near-square screen + ${cloudLabel} egress)`
       : "zh desktop cloud locale probe (near-square screen)";
   }
 
   // Common screen (e.g. 1920×1080) still botty when zh + shallow desktop
-  // + Tencent/Aceville egress — the Oct 2026 SEO scrape farm used both.
-  if (tencent && desktopSized) {
-    return "zh desktop cloud locale probe (Tencent egress)";
+  // + CN cloud egress — the Oct 2026 SEO scrape farm used both.
+  if (cnCloud && desktopSized) {
+    return `zh desktop cloud locale probe (${cloudLabel ?? "CN cloud"} egress)`;
   }
 
   return null;
