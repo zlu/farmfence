@@ -140,14 +140,18 @@ function isSearchNoiseMilestone(name: string): boolean {
   );
 }
 
+/** Max visible-tab seconds for strong geo↔TZ mismatch farms (LATAM/SG/US-X11). */
+const STRONG_MISMATCH_MAX_USAGE_SECONDS = 30;
+
 export function isShallowWebProbePayload(
   payload: Record<string, unknown>,
+  maxUsageSeconds = 15,
 ): boolean {
   const pv = typeof payload.pageViewCount === "number" ? payload.pageViewCount : 0;
   if (pv > 2) return false;
   const usage =
     typeof payload.totalUsageSeconds === "number" ? payload.totalUsageSeconds : 0;
-  if (usage > 15) return false;
+  if (usage > maxUsageSeconds) return false;
   const reached = Array.isArray(payload.funnelReached) ? payload.funnelReached : [];
   const milestones = reached.filter(
     (n) =>
@@ -169,15 +173,8 @@ export function datacenterHeadlessProbeReason(
   payload: Record<string, unknown>,
   opts?: WebProbeOptions,
 ): string | null {
-  const shallow =
-    typeof opts?.isShallow === "boolean"
-      ? opts.isShallow
-      : isShallowWebProbePayload(payload);
-  if (!shallow) return null;
-
   const usage =
     typeof payload.totalUsageSeconds === "number" ? payload.totalUsageSeconds : 0;
-  if (usage > 15) return null;
 
   const tz = typeof payload.timezone === "string" ? payload.timezone.trim() : "";
   const lang = typeof payload.language === "string" ? payload.language : "";
@@ -191,6 +188,58 @@ export function datacenterHeadlessProbeReason(
   const sh = payload.screenHeight;
   const screen =
     typeof sw === "number" && typeof sh === "number" ? `${sw}x${sh}` : "";
+  const ua = typeof payload.userAgent === "string" ? payload.userAgent : "";
+  const x11Linux = /X11;\s*Linux/i.test(ua);
+
+  const shallowTight =
+    typeof opts?.isShallow === "boolean"
+      ? opts.isShallow
+      : isShallowWebProbePayload(payload, 15);
+  const shallowMismatch =
+    typeof opts?.isShallow === "boolean"
+      ? opts.isShallow
+      : isShallowWebProbePayload(payload, STRONG_MISMATCH_MAX_USAGE_SECONDS);
+
+  // Strong geo↔TZ mismatch farms: allow up to 30s (Fortaleza scrape hit 16s
+  // and slipped the classic 15s gate).
+  if (usage <= STRONG_MISMATCH_MAX_USAGE_SECONDS && shallowMismatch) {
+    // LATAM residential egress + China mainland browser TZ is a proxy/farm
+    // tell. Require classic headless screen or English locale so a real
+    // Chinese traveler (zh + Asia/Shanghai + laptop) is not flagged.
+    if (
+      LATAM_COUNTRIES.has(country) &&
+      isChinaMainlandTimezone(tz) &&
+      (HEADLESS_PROBE_SCREENS.has(screen) || /^en\b/i.test(lang))
+    ) {
+      return "China browser TZ on LATAM geo (proxy/headless farm)";
+    }
+
+    // SG/HK cloud egress geo with China mainland browser TZ + English +
+    // synthetic screen (perfect/near-square or classic headless).
+    if (
+      (country === "SG" || country === "HK") &&
+      isChinaMainlandTimezone(tz) &&
+      /^en\b/i.test(lang) &&
+      (HEADLESS_PROBE_SCREENS.has(screen) ||
+        isNearSquareDesktopProbeScreen(sw, sh))
+    ) {
+      return "China browser TZ on SG/HK geo (cloud headless farm)";
+    }
+
+    // US + America/Los_Angeles + X11 Linux + 1920×1080 (LogicWeb / Ashburn).
+    if (
+      country === "US" &&
+      /^America\/Los_Angeles$/i.test(tz) &&
+      x11Linux &&
+      screen === "1920x1080" &&
+      /^en\b/i.test(lang)
+    ) {
+      return "US X11 Linux PT-timezone headless probe";
+    }
+  }
+
+  if (!shallowTight) return null;
+  if (usage > 15) return null;
 
   if (/@posix/i.test(lang)) {
     return "Synthetic POSIX locale (datacenter headless probe)";
@@ -207,9 +256,6 @@ export function datacenterHeadlessProbeReason(
     const label = typeof payload.city === "string" ? payload.city.trim() : city;
     return `Datacenter city probe (${label})`;
   }
-
-  const ua = typeof payload.userAgent === "string" ? payload.userAgent : "";
-  const x11Linux = /X11;\s*Linux/i.test(ua);
 
   // Ashburn / Council Bluffs need UTC, classic headless screen, or X11 Linux
   // corroboration (Ashburn has residents; city alone must never flag).
@@ -238,43 +284,6 @@ export function datacenterHeadlessProbeReason(
     /^en\b/i.test(lang)
   ) {
     return "UTC English probe from East-Asia residential geo";
-  }
-
-  // LATAM residential egress + China mainland browser TZ is a proxy/farm
-  // tell. Require classic headless screen or English locale so a real
-  // Chinese traveler (zh + Asia/Shanghai + laptop) is not flagged.
-  if (
-    LATAM_COUNTRIES.has(country) &&
-    isChinaMainlandTimezone(tz) &&
-    (HEADLESS_PROBE_SCREENS.has(screen) || /^en\b/i.test(lang))
-  ) {
-    return "China browser TZ on LATAM geo (proxy/headless farm)";
-  }
-
-  // SG/HK cloud egress geo with China mainland browser TZ + English +
-  // synthetic screen (perfect/near-square or classic headless). Catches
-  // Alibaba SG 43.119 farms that set Asia/Shanghai on en-US Macs.
-  if (
-    (country === "SG" || country === "HK") &&
-    isChinaMainlandTimezone(tz) &&
-    /^en\b/i.test(lang) &&
-    (HEADLESS_PROBE_SCREENS.has(screen) ||
-      isNearSquareDesktopProbeScreen(sw, sh))
-  ) {
-    return "China browser TZ on SG/HK geo (cloud headless farm)";
-  }
-
-  // US egress + America/Los_Angeles + X11 Linux + 1920×1080 — Oct 2026
-  // LogicWeb / Ashburn blog scrape farm (NYC geo with PT timezone, Chrome/153).
-  // Real CA Linux desktops are rare on shallow 0s blog hits with this fingerprint.
-  if (
-    country === "US" &&
-    /^America\/Los_Angeles$/i.test(tz) &&
-    x11Linux &&
-    screen === "1920x1080" &&
-    /^en\b/i.test(lang)
-  ) {
-    return "US X11 Linux PT-timezone headless probe";
   }
 
   return null;

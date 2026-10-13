@@ -103,13 +103,16 @@ if (isTencentCloudIp(ip)) {
   **LATAM geo + Asia/Shanghai** (or other China mainland IANA TZ) flags
   only with a classic headless screen or English locale — a Chinese
   traveler (`zh` + laptop) is spared.   **SG/HK + Asia/Shanghai + en +
-  near-square** catches Alibaba/Tencent cloud Mac farms. **US +
+  near-square** catches Alibaba/Tencent cloud Mac farms.   **US +
   America/Los_Angeles + X11 Linux + 1920×1080** catches LogicWeb /
-  Ashburn blog scrapers (NYC geo with PT timezone). **Tencent CIDRs
-  include `101.42.0.0/15`**; **Huawei AS136907** includes
-  `124.243.128.0/18` (SG) and `149.232.128.0/19` (MX). Near-square is
-  orientation-agnostic (portrait + perfect square). Same-IP / same-UA
-  burst clustering stays in the app — it needs a window of rows.
+  Ashburn blog scrapers (NYC geo with PT timezone). Strong geo↔TZ
+  mismatch rules (LATAM/SG/HK/US-X11) allow up to **30s** usage so
+  slow scrapes (e.g. 16s Fortaleza) are not missed; weaker headless
+  rules stay at 15s. **Tencent CIDRs include `101.42.0.0/15`**;
+  **Huawei AS136907** includes `124.243.128.0/18` (SG) and
+  `149.232.128.0/19` (MX). Near-square is orientation-agnostic
+  (portrait + perfect square). Same-IP / same-UA burst clustering
+  stays in the app — it needs a window of rows.
 - **Funnel event names are product-shaped** (`sign_in_canceled_google`,
   reading-time fields, etc.). Other apps may only get IP / locale / geo signals
   unless event names match or you adapt the helpers. Pass `opts.isShallow`

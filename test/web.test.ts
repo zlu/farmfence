@@ -303,6 +303,43 @@ assert(
   "Real Mac in LA must not flag on TZ+screen alone",
 );
 
+// Fortaleza: 16s slipped the old 15s gate — strong mismatch allows ≤30s.
+assert(
+  isDatacenterHeadlessProbePayload({
+    ip: "201.20.90.179",
+    city: "Fortaleza",
+    country: "BR",
+    timezone: "Asia/Shanghai",
+    timezoneOffsetMinutes: 480,
+    language: "en-US",
+    screenWidth: 1920,
+    screenHeight: 1080,
+    pageViewCount: 1,
+    totalUsageSeconds: 16,
+    funnelReached: ["character_opened"],
+    entryPath: "/discover/the_jealousies_of_a_country_town_se/characters/victurnien",
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  }),
+  "BR + Asia/Shanghai with 16s usage must still flag",
+);
+
+assert(
+  !isDatacenterHeadlessProbePayload({
+    ip: "201.20.90.179",
+    city: "Fortaleza",
+    country: "BR",
+    timezone: "Asia/Shanghai",
+    language: "en-US",
+    screenWidth: 1920,
+    screenHeight: 1080,
+    pageViewCount: 1,
+    totalUsageSeconds: 45,
+    funnelReached: ["character_opened"],
+  }),
+  "BR + Asia/Shanghai with 45s usage must not flag",
+);
+
 assert(
   !isDatacenterHeadlessProbePayload({
     city: "Saginaw",
