@@ -55,6 +55,44 @@ const DATACENTER_PROBE_CITIES = new Set([
   "the dalles",
 ]);
 
+/**
+ * Latin America ISO country codes — residential geos that never ship a
+ * China IANA browser timezone unless the client is a proxy/headless farm
+ * (Oct 2026 Melmoth pair: BR/EC egress + Asia/Shanghai + 800×600).
+ */
+const LATAM_COUNTRIES = new Set([
+  "AR",
+  "BO",
+  "BR",
+  "CL",
+  "CO",
+  "CR",
+  "CU",
+  "DO",
+  "EC",
+  "GT",
+  "HN",
+  "MX",
+  "NI",
+  "PA",
+  "PE",
+  "PY",
+  "SV",
+  "UY",
+  "VE",
+]);
+
+/** China mainland IANA / legacy TZ labels (not Singapore / HK / Taipei). */
+function isChinaMainlandTimezone(tz: string): boolean {
+  return (
+    /^Asia\/Shanghai$/i.test(tz) ||
+    /^Asia\/Chongqing$/i.test(tz) ||
+    /^Asia\/Harbin$/i.test(tz) ||
+    /^Asia\/Urumqi$/i.test(tz) ||
+    /^PRC$/i.test(tz)
+  );
+}
+
 /** Conversion-ish milestones shared across BR / NidNoi / Chalkline funnels. */
 const ENGAGED_MILESTONE_HINTS = new Set([
   "login_completed",
@@ -199,6 +237,30 @@ export function datacenterHeadlessProbeReason(
     return "UTC English probe from East-Asia residential geo";
   }
 
+  // LATAM residential egress + China mainland browser TZ is a proxy/farm
+  // tell. Require classic headless screen or English locale so a real
+  // Chinese traveler (zh + Asia/Shanghai + laptop) is not flagged.
+  if (
+    LATAM_COUNTRIES.has(country) &&
+    isChinaMainlandTimezone(tz) &&
+    (HEADLESS_PROBE_SCREENS.has(screen) || /^en\b/i.test(lang))
+  ) {
+    return "China browser TZ on LATAM geo (proxy/headless farm)";
+  }
+
+  // SG/HK cloud egress geo with China mainland browser TZ + English +
+  // synthetic screen (perfect/near-square or classic headless). Catches
+  // Alibaba SG 43.119 farms that set Asia/Shanghai on en-US Macs.
+  if (
+    (country === "SG" || country === "HK") &&
+    isChinaMainlandTimezone(tz) &&
+    /^en\b/i.test(lang) &&
+    (HEADLESS_PROBE_SCREENS.has(screen) ||
+      isNearSquareDesktopProbeScreen(sw, sh))
+  ) {
+    return "China browser TZ on SG/HK geo (cloud headless farm)";
+  }
+
   return null;
 }
 
@@ -222,10 +284,18 @@ export function isNearSquareDesktopProbeScreen(
   if (!Number.isFinite(width) || !Number.isFinite(height)) return false;
   const w = Math.floor(width);
   const h = Math.floor(height);
-  if (w < 1150 || w > 1500) return false;
-  if (h < 1000 || h > 1350) return false;
-  if (Math.abs(w - h) > 220) return false;
-  if (COMMON_DESKTOP_SCREENS.has(`${w}x${h}`)) return false;
+  // Orientation-agnostic: farms spoof portrait (1196×1365) and perfect
+  // squares (1366×1366) as often as landscape near-squares.
+  const lo = Math.min(w, h);
+  const hi = Math.max(w, h);
+  if (lo < 1000 || hi > 1500) return false;
+  if (hi - lo > 220) return false;
+  if (
+    COMMON_DESKTOP_SCREENS.has(`${w}x${h}`) ||
+    COMMON_DESKTOP_SCREENS.has(`${h}x${w}`)
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -282,6 +352,9 @@ export function cloudLocaleProbeReason(
   const lang = typeof payload.language === "string" ? payload.language : "";
   if (!/^zh\b/i.test(lang)) return null;
 
+  // Spare signed-in / converted sessions even with a probe-like screen.
+  if (hasStrongEngagement(payload)) return null;
+
   const ua = typeof payload.userAgent === "string" ? payload.userAgent : "";
   const sw = payload.screenWidth;
   const sh = payload.screenHeight;
@@ -291,10 +364,7 @@ export function cloudLocaleProbeReason(
     typeof sh === "number" &&
     sw >= 1024 &&
     sh >= 768;
-  if (!desktopUa && !(ua === "" && desktopSized)) return null;
-
-  // Spare signed-in / converted sessions even with a probe-like screen.
-  if (hasStrongEngagement(payload)) return null;
+  const mobileUa = /iPhone|iPad|iPod|Android/i.test(ua);
 
   const nearSquare = isNearSquareDesktopProbeScreen(sw, sh);
   const ip = typeof payload.ip === "string" ? payload.ip : null;
@@ -303,23 +373,33 @@ export function cloudLocaleProbeReason(
   const cnCloud = isCnCloudHostingIp(ip);
   const cloudLabel = tencent ? "Tencent" : huawei ? "Huawei" : null;
 
-  if (nearSquare) {
-    // Ignore shallow / opts.isShallow — preview_reader_opened must not exempt.
-    return cloudLabel
-      ? `zh desktop cloud locale probe (near-square screen + ${cloudLabel} egress)`
-      : "zh desktop cloud locale probe (near-square screen)";
-  }
-
   const shallow =
     typeof opts?.isShallow === "boolean"
       ? opts.isShallow
       : isShallowWebProbePayload(payload);
-  if (!shallow) return null;
 
-  // Common screen (e.g. 1920×1080) still botty when zh + shallow desktop
-  // + CN cloud egress — the Oct 2026 SEO scrape farm used both.
-  if (cnCloud && desktopSized) {
-    return `zh desktop cloud locale probe (${cloudLabel ?? "CN cloud"} egress)`;
+  if (desktopUa || (ua === "" && desktopSized)) {
+    if (nearSquare) {
+      // Ignore shallow — preview_reader_opened must not exempt.
+      return cloudLabel
+        ? `zh desktop cloud locale probe (near-square screen + ${cloudLabel} egress)`
+        : "zh desktop cloud locale probe (near-square screen)";
+    }
+
+    if (!shallow) return null;
+
+    // Common screen (e.g. 1920×1080) still botty when zh + shallow desktop
+    // + CN cloud egress — the Oct 2026 SEO scrape farm used both.
+    if (cnCloud && desktopSized) {
+      return `zh desktop cloud locale probe (${cloudLabel ?? "CN cloud"} egress)`;
+    }
+    return null;
+  }
+
+  // zh mobile on Tencent/Huawei ECS — hosting egress, not residential CN
+  // carriers. Oct 2026 Aceville iPhone farms hit book-detail / characters.
+  if (shallow && cnCloud && mobileUa) {
+    return `zh mobile cloud locale probe (${cloudLabel ?? "CN cloud"} egress)`;
   }
 
   return null;

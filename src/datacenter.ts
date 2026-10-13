@@ -84,6 +84,8 @@ const TENCENT_CLOUD_CIDRS = [
   "49.51.0.0/16",
   "49.232.0.0/14", // Beijing Tencent
   "101.32.0.0/16",
+  // TENCENT-CN (AS45090) Beijing — APNIC 101.42.0.0–101.43.255.255
+  "101.42.0.0/15",
   "110.238.0.0/16",
   "119.8.0.0/16",
   "119.28.0.0/16",
@@ -110,6 +112,9 @@ const HUAWEI_CLOUD_CIDRS = [
   "116.204.0.0/16", // HWCSNET public cloud (Beijing zh preview farm)
   "159.138.0.0/16",
   "114.119.0.0/16",
+  // AS136907 HUAWEI CLOUDS (intl) — SG / MX ECS scrape farms (Oct 2026)
+  "124.243.128.0/18", // Huawei-Cloud-SG (ecs-*.compute.hwclouds-dns.com)
+  "149.232.128.0/19", // Huawei-Cloud-MX 149.232.128–159
 ];
 
 export function isHuaweiCloudIp(ip: string | null | undefined): boolean {

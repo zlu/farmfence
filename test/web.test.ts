@@ -161,6 +161,92 @@ assert(
   "Real-looking Warsaw Android must not flag",
 );
 
+// LATAM geo + Asia/Shanghai + 800×600 / en-US (Oct 2026 Melmoth pair).
+assert(
+  isDatacenterHeadlessProbePayload({
+    ip: "209.14.136.78",
+    city: "Campinas",
+    country: "BR",
+    timezone: "Asia/Shanghai",
+    timezoneOffsetMinutes: 480,
+    language: "en-US",
+    screenWidth: 800,
+    screenHeight: 600,
+    pageViewCount: 1,
+    funnelReached: ["book_detail_opened"],
+    entryPath: "/discover/melmoth_the_wanderer_se",
+    totalUsageSeconds: 0,
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+  }),
+  "BR + Asia/Shanghai + 800x600 en-US shallow should flag",
+);
+
+assert(
+  isDatacenterHeadlessProbePayload({
+    ip: "45.4.202.255",
+    city: "Quito",
+    country: "EC",
+    timezone: "Asia/Shanghai",
+    timezoneOffsetMinutes: 480,
+    language: "en-US",
+    screenWidth: 1280,
+    screenHeight: 720,
+    pageViewCount: 1,
+    funnelReached: ["book_detail_opened"],
+    totalUsageSeconds: 0,
+  }),
+  "EC + Asia/Shanghai + en-US (non-800 screen) should flag via locale",
+);
+
+assert(
+  !isDatacenterHeadlessProbePayload({
+    ip: "209.14.136.78",
+    city: "Campinas",
+    country: "BR",
+    timezone: "Asia/Shanghai",
+    language: "zh-CN",
+    screenWidth: 1512,
+    screenHeight: 982,
+    pageViewCount: 1,
+    funnelReached: ["home_viewed"],
+    totalUsageSeconds: 0,
+  }),
+  "Chinese traveler in BR (zh + laptop) must not flag",
+);
+
+assert(
+  !isDatacenterHeadlessProbePayload({
+    ip: "209.14.136.78",
+    city: "Campinas",
+    country: "BR",
+    timezone: "America/Sao_Paulo",
+    language: "en-US",
+    screenWidth: 800,
+    screenHeight: 600,
+    pageViewCount: 1,
+    funnelReached: ["book_detail_opened"],
+    totalUsageSeconds: 0,
+  }),
+  "LATAM + local TZ must not flag on screen alone",
+);
+
+assert(
+  isDatacenterHeadlessProbePayload({
+    ip: "43.119.100.92",
+    city: "Singapore",
+    country: "SG",
+    timezone: "Asia/Shanghai",
+    language: "en-US",
+    screenWidth: 1366,
+    screenHeight: 1366,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["book_detail_opened", "app_nudge_shown"],
+  }),
+  "SG + Asia/Shanghai + en-US perfect square must flag",
+);
+
 assert(
   !isDatacenterHeadlessProbePayload({
     city: "Saginaw",
@@ -224,6 +310,9 @@ assert(
 assert(isNearSquareDesktopProbeScreen(1261, 1160), "1261x1160 is near-square probe");
 assert(isNearSquareDesktopProbeScreen(1397, 1254), "1397x1254 is near-square probe");
 assert(isNearSquareDesktopProbeScreen(1205, 1039), "1205x1039 is near-square probe");
+assert(isNearSquareDesktopProbeScreen(1255, 1353), "1255x1353 portrait near-square");
+assert(isNearSquareDesktopProbeScreen(1196, 1365), "1196x1365 portrait near-square");
+assert(isNearSquareDesktopProbeScreen(1366, 1366), "1366x1366 perfect square probe");
 assert(!isNearSquareDesktopProbeScreen(1920, 1080), "1920x1080 is a real desktop");
 assert(!isNearSquareDesktopProbeScreen(1512, 982), "MacBook 1512x982 is real");
 
@@ -232,13 +321,19 @@ assert(isTencentCloudIp("43.135.33.1"), "Aceville HK is Tencent");
 assert(isTencentCloudIp("43.159.128.150"), "Aceville 43.156–43.159 gap");
 assert(isTencentCloudIp("49.232.32.8"), "Beijing Tencent");
 assert(isTencentCloudIp("152.136.228.208"), "TENCENT-CN Beijing 152.136/16");
+assert(isTencentCloudIp("101.42.1.26"), "TENCENT-CN Beijing 101.42/15");
+assert(isTencentCloudIp("101.43.255.1"), "TENCENT-CN Beijing 101.43 upper");
 assert(isTencentCloudIp("170.106.75.238"), "Aceville US POP 170.106");
 assert(!isTencentCloudIp("8.8.8.8"), "Google DNS is not Tencent");
+assert(!isTencentCloudIp("101.41.0.1"), "101.41 is outside TENCENT-CN 101.42/15");
 assert(isHuaweiCloudIp("113.44.120.122"), "Huawei Cloud Beijing ECS");
 assert(isHuaweiCloudIp("116.204.107.221"), "HWCSNET Huawei public cloud");
+assert(isHuaweiCloudIp("124.243.135.125"), "Huawei Cloud SG 124.243/18");
+assert(isHuaweiCloudIp("149.232.133.96"), "Huawei Cloud MX 149.232/19");
 assert(isCnCloudHostingIp("113.44.120.122"), "Huawei counts as CN cloud");
 assert(isCnCloudHostingIp("43.135.0.3"), "Aceville counts as CN cloud");
 assert(!isHuaweiCloudIp("8.8.8.8"), "Google DNS is not Huawei");
+assert(!isHuaweiCloudIp("124.243.100.1"), "124.243.100 outside Huawei /18");
 
 assert(
   isCloudLocaleProbePayload({
@@ -319,6 +414,95 @@ assert(
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
   }),
   "zh-CN + TENCENT-CN 152.136 + LCSH subject search should flag",
+);
+
+assert(
+  isCloudLocaleProbePayload({
+    ip: "101.42.1.26",
+    country: "CN",
+    city: "Beijing",
+    language: "zh-CN",
+    timezone: "Asia/Shanghai",
+    screenWidth: 1134,
+    screenHeight: 1210,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["questions_opened"],
+    entryPath: "/discover/short_fiction_10_se/questions/how-fear-of-the-unknown",
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+  }),
+  "zh-CN + TENCENT-CN 101.42 shallow questions scrape should flag",
+);
+
+assert(
+  isCloudLocaleProbePayload({
+    ip: "124.243.135.125",
+    country: "SG",
+    city: "Singapore",
+    language: "zh-CN",
+    timezone: "Asia/Singapore",
+    screenWidth: 1255,
+    screenHeight: 1353,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["book_detail_opened", "app_nudge_shown"],
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+  }),
+  "zh-CN Huawei SG near-square desktop should flag",
+);
+
+assert(
+  isCloudLocaleProbePayload({
+    ip: "149.232.133.96",
+    country: "MX",
+    city: "Mexico City",
+    language: "zh-CN",
+    timezone: "America/Mexico_City",
+    screenWidth: 1196,
+    screenHeight: 1365,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["book_detail_opened"],
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+  }),
+  "zh-CN Huawei MX portrait near-square should flag",
+);
+
+assert(
+  isCloudLocaleProbePayload({
+    ip: "43.128.84.217",
+    country: "SG",
+    city: "Singapore",
+    language: "zh-CN",
+    timezone: "Asia/Singapore",
+    screenWidth: 430,
+    screenHeight: 932,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["book_detail_opened", "app_nudge_shown"],
+    userAgent:
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1",
+  }),
+  "zh-CN Aceville iPhone shallow must flag",
+);
+
+assert(
+  !isCloudLocaleProbePayload({
+    ip: "43.128.84.217",
+    country: "SG",
+    language: "zh-CN",
+    screenWidth: 430,
+    screenHeight: 932,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["login_completed"],
+    userAgent:
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1",
+  }),
+  "engaged zh mobile on Aceville must not flag",
 );
 
 assert(
