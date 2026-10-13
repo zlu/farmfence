@@ -83,7 +83,7 @@ if (isTencentCloudIp(ip)) {
 | Google user-triggered fetcher + Play randomized locale (`en-SG`, …) | yes |
 | Google / Apple review-farm IP + locale↔TZ mismatch or OAuth cancel loop | yes (install path) |
 | Meta / Bing / AWS datacenter crawler IP | yes (web path) |
-| Web headless probes (`Etc/Unknown`, `@posix`, UTC+800×600, Boardman city, KR UTC English, LATAM+Asia/Shanghai, SG/HK+Asia/Shanghai+en near-square) | yes when shallow |
+| Web headless probes (`Etc/Unknown`, `@posix`, UTC+800×600, Boardman city, KR UTC English, LATAM+Asia/Shanghai, SG/HK+Asia/Shanghai+en near-square, US X11 Linux + America/Los_Angeles + 1920×1080) | yes when shallow |
 | Web zh cloud locale probes (near-square desktop; Tencent/Huawei desktop shallow; Tencent/Huawei mobile shallow) | yes for near-square (guest preview does not exempt); soft path when shallow |
 | Broader Google infra IP alone | no — `isHumanLikeInstall` can clear |
 | Tencent Cloud IP alone | no — soft corroboration only |
@@ -102,9 +102,11 @@ if (isTencentCloudIp(ip)) {
   near-square randomized screen and/or Tencent/Aceville corroboration.
   **LATAM geo + Asia/Shanghai** (or other China mainland IANA TZ) flags
   only with a classic headless screen or English locale — a Chinese
-  traveler (`zh` + laptop) is spared. **SG/HK + Asia/Shanghai + en +
-  near-square** catches Alibaba/Tencent cloud Mac farms. **Tencent
-  CIDRs include `101.42.0.0/15`**; **Huawei AS136907** includes
+  traveler (`zh` + laptop) is spared.   **SG/HK + Asia/Shanghai + en +
+  near-square** catches Alibaba/Tencent cloud Mac farms. **US +
+  America/Los_Angeles + X11 Linux + 1920×1080** catches LogicWeb /
+  Ashburn blog scrapers (NYC geo with PT timezone). **Tencent CIDRs
+  include `101.42.0.0/15`**; **Huawei AS136907** includes
   `124.243.128.0/18` (SG) and `149.232.128.0/19` (MX). Near-square is
   orientation-agnostic (portrait + perfect square). Same-IP / same-UA
   burst clustering stays in the app — it needs a window of rows.

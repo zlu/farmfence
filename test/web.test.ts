@@ -247,6 +247,62 @@ assert(
   "SG + Asia/Shanghai + en-US perfect square must flag",
 );
 
+// Oct 2026 LogicWeb / Ashburn X11 Linux PT-timezone blog farm.
+assert(
+  isDatacenterHeadlessProbePayload({
+    ip: "149.57.176.235",
+    city: "New York City",
+    country: "US",
+    timezone: "America/Los_Angeles",
+    language: "en-US",
+    screenWidth: 1920,
+    screenHeight: 1080,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: [],
+    entryPath: "/blog/todays-review-on-a-classic",
+    userAgent:
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  }),
+  "NYC + LA TZ + X11 Linux 1920x1080 must flag",
+);
+
+assert(
+  isDatacenterHeadlessProbePayload({
+    ip: "136.162.128.120",
+    city: "Ashburn",
+    country: "US",
+    timezone: "America/Los_Angeles",
+    language: "en-US",
+    screenWidth: 1920,
+    screenHeight: 1080,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["app_nudge_shown"],
+    userAgent:
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  }),
+  "Ashburn + X11 Linux (no UTC) must flag",
+);
+
+assert(
+  !isDatacenterHeadlessProbePayload({
+    ip: "203.0.113.10",
+    city: "Los Angeles",
+    country: "US",
+    timezone: "America/Los_Angeles",
+    language: "en-US",
+    screenWidth: 1920,
+    screenHeight: 1080,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["home_viewed"],
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  }),
+  "Real Mac in LA must not flag on TZ+screen alone",
+);
+
 assert(
   !isDatacenterHeadlessProbePayload({
     city: "Saginaw",

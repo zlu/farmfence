@@ -208,11 +208,14 @@ export function datacenterHeadlessProbeReason(
     return `Datacenter city probe (${label})`;
   }
 
-  // Ashburn / Council Bluffs need UTC or classic headless screen corroboration
-  // (Ashburn has residents; city alone must never flag).
+  const ua = typeof payload.userAgent === "string" ? payload.userAgent : "";
+  const x11Linux = /X11;\s*Linux/i.test(ua);
+
+  // Ashburn / Council Bluffs need UTC, classic headless screen, or X11 Linux
+  // corroboration (Ashburn has residents; city alone must never flag).
   if (
     DATACENTER_PROBE_CITIES.has(city) &&
-    (utcTz || HEADLESS_PROBE_SCREENS.has(screen))
+    (utcTz || HEADLESS_PROBE_SCREENS.has(screen) || x11Linux)
   ) {
     const label = typeof payload.city === "string" ? payload.city.trim() : city;
     return `Datacenter city probe (${label})`;
@@ -259,6 +262,19 @@ export function datacenterHeadlessProbeReason(
       isNearSquareDesktopProbeScreen(sw, sh))
   ) {
     return "China browser TZ on SG/HK geo (cloud headless farm)";
+  }
+
+  // US egress + America/Los_Angeles + X11 Linux + 1920×1080 — Oct 2026
+  // LogicWeb / Ashburn blog scrape farm (NYC geo with PT timezone, Chrome/153).
+  // Real CA Linux desktops are rare on shallow 0s blog hits with this fingerprint.
+  if (
+    country === "US" &&
+    /^America\/Los_Angeles$/i.test(tz) &&
+    x11Linux &&
+    screen === "1920x1080" &&
+    /^en\b/i.test(lang)
+  ) {
+    return "US X11 Linux PT-timezone headless probe";
   }
 
   return null;
