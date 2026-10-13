@@ -79,7 +79,8 @@ const TENCENT_CLOUD_CIDRS = [
   "1.12.0.0/14",
   "43.128.0.0/13", // Aceville 43.128–43.135 (HK/SG)
   "43.152.0.0/14", // 43.152–43.155
-  "43.160.0.0/12", // Aceville edge 43.160–43.175 (incl. US POP)
+  "43.156.0.0/14", // Aceville 43.156–43.159 (gap between /14s above)
+  "43.160.0.0/12", // Aceville edge 43.160–43.175 (incl. US / Santa Clara POP)
   "49.51.0.0/16",
   "49.232.0.0/14", // Beijing Tencent
   "101.32.0.0/16",
@@ -92,6 +93,8 @@ const TENCENT_CLOUD_CIDRS = [
   // TENCENT-CN (AS45090) Beijing — LCSH subject-scrape farm (152.136.228.x)
   "152.136.0.0/16",
   "162.14.0.0/16",
+  // Aceville PTE (AS132203) US POP — whois ACEVILLE; geo often Santa Clara
+  "170.106.0.0/16",
 ];
 
 export function isTencentCloudIp(ip: string | null | undefined): boolean {
@@ -104,6 +107,7 @@ export function isTencentCloudIp(ip: string | null | undefined): boolean {
  */
 const HUAWEI_CLOUD_CIDRS = [
   "113.44.0.0/16", // hwclouds-dns.com ECS (incl. 113.44.120.x scrape farm)
+  "116.204.0.0/16", // HWCSNET public cloud (Beijing zh preview farm)
   "159.138.0.0/16",
   "114.119.0.0/16",
 ];

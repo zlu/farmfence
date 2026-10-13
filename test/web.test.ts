@@ -229,10 +229,13 @@ assert(!isNearSquareDesktopProbeScreen(1512, 982), "MacBook 1512x982 is real");
 
 assert(isTencentCloudIp("43.134.117.10"), "Aceville SG is Tencent");
 assert(isTencentCloudIp("43.135.33.1"), "Aceville HK is Tencent");
+assert(isTencentCloudIp("43.159.128.150"), "Aceville 43.156–43.159 gap");
 assert(isTencentCloudIp("49.232.32.8"), "Beijing Tencent");
 assert(isTencentCloudIp("152.136.228.208"), "TENCENT-CN Beijing 152.136/16");
+assert(isTencentCloudIp("170.106.75.238"), "Aceville US POP 170.106");
 assert(!isTencentCloudIp("8.8.8.8"), "Google DNS is not Tencent");
 assert(isHuaweiCloudIp("113.44.120.122"), "Huawei Cloud Beijing ECS");
+assert(isHuaweiCloudIp("116.204.107.221"), "HWCSNET Huawei public cloud");
 assert(isCnCloudHostingIp("113.44.120.122"), "Huawei counts as CN cloud");
 assert(isCnCloudHostingIp("43.135.0.3"), "Aceville counts as CN cloud");
 assert(!isHuaweiCloudIp("8.8.8.8"), "Google DNS is not Huawei");
@@ -375,6 +378,58 @@ assert(
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
   }),
   "Engaged zh visitor must not flag",
+);
+
+// Santa Clara Aceville farm: direct /reader?preview=1 (Oct 2026). Guest
+// preview milestones previously exempted via shallow=false.
+assert(
+  isCloudLocaleProbePayload({
+    ip: "43.173.108.209",
+    country: "US",
+    city: "Santa Clara",
+    language: "zh-CN",
+    timezone: "America/Los_Angeles",
+    screenWidth: 1248,
+    screenHeight: 1117,
+    pageViewCount: 2,
+    totalUsageSeconds: 0,
+    funnelReached: [
+      "reader_opened",
+      "preview_reader_opened",
+      "preview_first_win_shown",
+      "login_opened",
+    ],
+    entryPath: "/reader?bookId=sense_and_sensibility_se&preview=1&chapter=xi",
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+  }),
+  "zh guest-preview near-square Aceville Santa Clara must flag",
+);
+
+assert(
+  isCloudLocaleProbePayload(
+    {
+      ip: "170.106.75.238",
+      country: "US",
+      city: "Santa Clara",
+      language: "zh-CN",
+      screenWidth: 1372,
+      screenHeight: 1291,
+      pageViewCount: 1,
+      totalUsageSeconds: 0,
+      funnelReached: [
+        "reader_opened",
+        "preview_reader_opened",
+        "preview_first_win_shown",
+        "preview_gate_shown",
+      ],
+      entryPath: "/reader?bookId=war_and_peace&preview=1&chapter=xv",
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+    },
+    { isShallow: false },
+  ),
+  "near-square guest preview must flag even when opts.isShallow is false",
 );
 
 assert(

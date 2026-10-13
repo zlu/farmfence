@@ -236,21 +236,45 @@ function isDesktopBrowserUa(ua: string): boolean {
 }
 
 /**
- * Spaced zh-CN (etc.) desktop cloud scrapers: fixed Chinese locale, shallow
- * bounce, randomized near-square screen and/or CN cloud egress
- * (Tencent / Huawei). Geo+timezone are often spoofed to match the exit
- * country, so mismatch is not required. Never flags on language alone.
+ * Real conversion — not guest-preview chrome. Guest `/reader?preview=1`
+ * farms fire `preview_reader_opened` / `reader_opened` and would otherwise
+ * look "engaged" to the shallow check.
+ */
+const STRONG_ENGAGEMENT_MILESTONES = new Set([
+  "login_completed",
+  "signup_completed",
+  "book_added",
+  "reader_engaged",
+  "bookshelf_opened",
+  "used_5min",
+  "read_5min",
+  "app_opened",
+  "board_published",
+  "project_published",
+]);
+
+function hasStrongEngagement(payload: Record<string, unknown>): boolean {
+  const reached = Array.isArray(payload.funnelReached) ? payload.funnelReached : [];
+  return reached.some(
+    (n) => typeof n === "string" && STRONG_ENGAGEMENT_MILESTONES.has(n),
+  );
+}
+
+/**
+ * Spaced zh-CN (etc.) desktop cloud scrapers: fixed Chinese locale,
+ * randomized near-square screen and/or CN cloud egress (Tencent / Huawei).
+ * Geo+timezone are often spoofed to match the exit country, so mismatch
+ * is not required. Never flags on language alone.
+ *
+ * Near-square screens are synthetic enough that guest-preview milestones
+ * must not exempt (Oct 2026 Santa Clara / SG / HK farm opened
+ * `/reader?preview=1` directly). Soft path (common screen + CN cloud)
+ * still requires a shallow bounce.
  */
 export function cloudLocaleProbeReason(
   payload: Record<string, unknown>,
   opts?: WebProbeOptions,
 ): string | null {
-  const shallow =
-    typeof opts?.isShallow === "boolean"
-      ? opts.isShallow
-      : isShallowWebProbePayload(payload);
-  if (!shallow) return null;
-
   const usage =
     typeof payload.totalUsageSeconds === "number" ? payload.totalUsageSeconds : 0;
   if (usage > 15) return null;
@@ -269,6 +293,9 @@ export function cloudLocaleProbeReason(
     sh >= 768;
   if (!desktopUa && !(ua === "" && desktopSized)) return null;
 
+  // Spare signed-in / converted sessions even with a probe-like screen.
+  if (hasStrongEngagement(payload)) return null;
+
   const nearSquare = isNearSquareDesktopProbeScreen(sw, sh);
   const ip = typeof payload.ip === "string" ? payload.ip : null;
   const tencent = isTencentCloudIp(ip);
@@ -277,10 +304,17 @@ export function cloudLocaleProbeReason(
   const cloudLabel = tencent ? "Tencent" : huawei ? "Huawei" : null;
 
   if (nearSquare) {
+    // Ignore shallow / opts.isShallow — preview_reader_opened must not exempt.
     return cloudLabel
       ? `zh desktop cloud locale probe (near-square screen + ${cloudLabel} egress)`
       : "zh desktop cloud locale probe (near-square screen)";
   }
+
+  const shallow =
+    typeof opts?.isShallow === "boolean"
+      ? opts.isShallow
+      : isShallowWebProbePayload(payload);
+  if (!shallow) return null;
 
   // Common screen (e.g. 1920×1080) still botty when zh + shallow desktop
   // + CN cloud egress — the Oct 2026 SEO scrape farm used both.

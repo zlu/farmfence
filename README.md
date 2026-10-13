@@ -84,7 +84,7 @@ if (isTencentCloudIp(ip)) {
 | Google / Apple review-farm IP + locale↔TZ mismatch or OAuth cancel loop | yes (install path) |
 | Meta / Bing / AWS datacenter crawler IP | yes (web path) |
 | Web headless probes (`Etc/Unknown`, `@posix`, UTC+800×600, Boardman city, KR UTC English) | yes when shallow |
-| Web zh desktop cloud locale probes (near-square screen and/or Tencent/Aceville + shallow) | yes when shallow |
+| Web zh desktop cloud locale probes (near-square screen; or Tencent/Aceville + shallow) | yes for near-square (guest preview does not exempt); soft path when shallow |
 | Broader Google infra IP alone | no — `isHumanLikeInstall` can clear |
 | Tencent Cloud IP alone | no — soft corroboration only |
 
