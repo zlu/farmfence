@@ -26,6 +26,7 @@ export {
 export {
   cloudLocaleProbeReason,
   datacenterHeadlessProbeReason,
+  isAutomatedBrowserUserAgent,
   isCloudLocaleProbePayload,
   isDatacenterHeadlessProbePayload,
   isNearSquareDesktopProbeScreen,

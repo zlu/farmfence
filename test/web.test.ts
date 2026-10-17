@@ -9,6 +9,7 @@ import {
 import {
   cloudLocaleProbeReason,
   datacenterHeadlessProbeReason,
+  isAutomatedBrowserUserAgent,
   isCloudLocaleProbePayload,
   isDatacenterHeadlessProbePayload,
   isNearSquareDesktopProbeScreen,
@@ -18,6 +19,24 @@ import {
 function assert(cond: unknown, msg: string) {
   if (!cond) throw new Error(msg);
 }
+
+assert(
+  isAutomatedBrowserUserAgent("Lightpanda/1.0"),
+  "Lightpanda must be recognized as explicit browser automation",
+);
+assert(
+  datacenterHeadlessProbeReason({
+    country: "TR",
+    timezone: "Asia/Shanghai",
+    language: "en-US",
+    screenWidth: 1280,
+    screenHeight: 720,
+    totalUsageSeconds: 30,
+    funnelReached: ["reader_opened", "reader_engaged"],
+    userAgent: "Lightpanda/1.0",
+  }) === "Lightpanda headless browser",
+  "Lightpanda must flag regardless of synthetic engagement or elapsed time",
+);
 
 assert(
   isDatacenterHeadlessProbePayload({
@@ -50,6 +69,51 @@ assert(
     entryPath: "/",
   }),
   "Council Bluffs Etc/Unknown should flag",
+);
+
+assert(
+  isDatacenterHeadlessProbePayload(
+    {
+      ip: "34.122.147.229",
+      city: "Council Bluffs",
+      country: "US",
+      timezone: "Etc/Unknown",
+      language: "en-US",
+      screenWidth: 1024,
+      screenHeight: 1024,
+      pageViewCount: 2,
+      totalUsageSeconds: 7,
+      funnelReached: [
+        "home_viewed",
+        "page_view",
+        "preview_reader_opened",
+        "reader_engaged",
+      ],
+      entryPath: "/",
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.60 Safari/537.36 Edge/12.246",
+    },
+    { isShallow: false },
+  ),
+  "Council Bluffs Etc/Unknown + reader_engaged must still flag (guest preview)",
+);
+
+assert(
+  !isDatacenterHeadlessProbePayload({
+    ip: "34.122.147.229",
+    city: "Council Bluffs",
+    country: "US",
+    timezone: "Etc/Unknown",
+    language: "en-US",
+    screenWidth: 1024,
+    screenHeight: 1024,
+    pageViewCount: 2,
+    funnelReached: ["home_viewed", "reader_engaged"],
+    entryPath: "/",
+    signedIn: true,
+    email: "reader@example.com",
+  }),
+  "Signed-in Etc/Unknown must not auto-flag",
 );
 
 assert(
@@ -97,6 +161,213 @@ assert(
     entryPath: "/",
   }),
   "Boardman shallow (any TZ) should flag",
+);
+
+assert(
+  isDatacenterHeadlessProbePayload({
+    ip: "91.98.178.78",
+    city: "Falkenstein",
+    country: "DE",
+    region: "SN",
+    timezone: "America/Los_Angeles",
+    language: "en-US",
+    screenWidth: 800,
+    screenHeight: 600,
+    pageViewCount: 1,
+    funnelReached: ["home_viewed", "page_view"],
+    entryPath: "/",
+    totalUsageSeconds: 0,
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.5477.1190 Safari/537.36",
+  }),
+  "Hetzner Falkenstein shallow (PT TZ spoof) should flag",
+);
+
+assert(
+  isDatacenterHeadlessProbePayload({
+    ip: "65.195.109.151",
+    city: "New York City",
+    country: "US",
+    region: "NY",
+    timezone: "Europe/Kiev",
+    language: "en-US",
+    screenWidth: 1280,
+    screenHeight: 900,
+    pageViewCount: 3,
+    totalUsageSeconds: 6,
+    funnelReached: ["home_viewed", "login_opened", "login_abandoned", "app_nudge_shown"],
+    entryPath: "/",
+    userAgent:
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+  }),
+  "US X11 Linux Europe/Kiev shallow should flag",
+);
+
+assert(
+  !isDatacenterHeadlessProbePayload({
+    city: "Vyshneve",
+    country: "UA",
+    timezone: "Europe/Kiev",
+    language: "en-US",
+    screenWidth: 1920,
+    screenHeight: 1080,
+    pageViewCount: 1,
+    funnelReached: ["home_viewed", "page_view"],
+    entryPath: "/",
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+  }),
+  "UA residential Europe/Kiev must not flag",
+);
+
+assert(
+  isDatacenterHeadlessProbePayload({
+    ip: "45.40.50.104",
+    city: "Singapore",
+    country: "SG",
+    timezone: "Asia/Shanghai",
+    language: "zh-CN",
+    screenWidth: 820,
+    screenHeight: 1180,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["character_opened"],
+    entryPath: "/discover/the_cherry_orchard_se/characters/epihodov",
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6.1 Safari/605.1.15",
+  }),
+  "SG Shanghai zh Mac UA + iPad 820x1180 should flag",
+);
+
+assert(
+  !isDatacenterHeadlessProbePayload({
+    city: "Singapore",
+    country: "SG",
+    timezone: "Asia/Shanghai",
+    language: "zh-CN",
+    screenWidth: 1512,
+    screenHeight: 982,
+    pageViewCount: 1,
+    funnelReached: ["home_viewed", "page_view"],
+    entryPath: "/",
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+  }),
+  "SG Chinese traveler on real MacBook screen must not flag",
+);
+
+assert(
+  isDatacenterHeadlessProbePayload({
+    ip: "45.78.58.170",
+    city: "Osaka",
+    country: "JP",
+    timezone: "America/New_York",
+    language: "en-US",
+    screenWidth: 1920,
+    screenHeight: 1080,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["app_nudge_shown"],
+    entryPath: "/collections/anne-carson",
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+  }),
+  "JP America/New_York shallow should flag",
+);
+
+assert(
+  isDatacenterHeadlessProbePayload({
+    ip: "194.26.202.49",
+    city: "Centreville",
+    country: "US",
+    region: "VA",
+    timezone: "America/New_York",
+    language: "en-US",
+    screenWidth: 1920,
+    screenHeight: 1080,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["app_nudge_shown"],
+    entryPath: "/collections/anne-carson",
+    userAgent:
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+  }),
+  "Centreville VA X11 Linux shallow should flag",
+);
+
+assert(
+  isDatacenterHeadlessProbePayload({
+    ip: "45.76.146.8",
+    city: "Singapore",
+    country: "SG",
+    timezone: "UTC",
+    language: "en-US",
+    screenWidth: 800,
+    screenHeight: 600,
+    pageViewCount: 1,
+    totalUsageSeconds: 1,
+    funnelReached: ["app_nudge_shown"],
+    entryPath: "/collections/anne-carson",
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  }),
+  "SG UTC 800x600 Mac Catalina Chrome should flag",
+);
+
+assert(
+  isDatacenterHeadlessProbePayload({
+    ip: "94.131.127.240",
+    city: "Madrid",
+    country: "ES",
+    timezone: "Asia/Yekaterinburg",
+    language: "ru-RU",
+    screenWidth: 2144,
+    screenHeight: 1206,
+    pageViewCount: 1,
+    totalUsageSeconds: 1,
+    funnelReached: ["app_nudge_shown"],
+    entryPath: "/collections/anne-carson",
+    userAgent:
+      "Mozilla/5.0 (X11; Linux x86_64; rv:157.0) Gecko/20100101 Firefox/157.0",
+  }),
+  "ES Asia/Yekaterinburg ru-RU should flag",
+);
+
+assert(
+  isDatacenterHeadlessProbePayload({
+    ip: "71.167.211.120",
+    city: "New York City",
+    country: "US",
+    timezone: "America/New_York",
+    language: "en-US",
+    screenWidth: 393,
+    screenHeight: 852,
+    pageViewCount: 1,
+    totalUsageSeconds: 15,
+    funnelReached: ["app_nudge_shown"],
+    entryPath: "/collections/anne-carson",
+    userAgent:
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6.1 Mobile/15E148 Safari/604.1",
+  }),
+  "iPhone iOS 18 + Safari Version/26 should flag",
+);
+
+assert(
+  !isDatacenterHeadlessProbePayload({
+    city: "New York City",
+    country: "US",
+    timezone: "America/New_York",
+    language: "en-US",
+    screenWidth: 393,
+    screenHeight: 852,
+    pageViewCount: 1,
+    totalUsageSeconds: 15,
+    funnelReached: ["app_nudge_shown"],
+    entryPath: "/collections/anne-carson",
+    userAgent:
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6.2 Mobile/15E148 Safari/604.1",
+  }),
+  "Real iPhone iOS 18 + Safari Version/18 must not flag",
 );
 
 assert(
@@ -247,6 +518,123 @@ assert(
   "SG + Asia/Shanghai + en-US perfect square must flag",
 );
 
+// Oct 2026 VN / DE + Asia/Shanghai + 1366×1366 Mac farm (same family as SG).
+assert(
+  isDatacenterHeadlessProbePayload({
+    ip: "113.161.68.210",
+    city: "Ho Chi Minh City",
+    country: "VN",
+    timezone: "Asia/Shanghai",
+    timezoneOffsetMinutes: 480,
+    language: "en-US",
+    screenWidth: 1366,
+    screenHeight: 1366,
+    pageViewCount: 1,
+    totalUsageSeconds: 7,
+    funnelReached: ["character_opened"],
+  }),
+  "VN + Asia/Shanghai + en-US perfect square must flag",
+);
+
+assert(
+  isDatacenterHeadlessProbePayload({
+    ip: "80.134.177.253",
+    city: "Krefeld",
+    country: "DE",
+    timezone: "Asia/Shanghai",
+    timezoneOffsetMinutes: 480,
+    language: "en-US",
+    screenWidth: 1366,
+    screenHeight: 1366,
+    pageViewCount: 1,
+    totalUsageSeconds: 7,
+    funnelReached: ["character_opened"],
+  }),
+  "DE + Asia/Shanghai + en-US perfect square must flag",
+);
+
+assert(
+  !isDatacenterHeadlessProbePayload({
+    ip: "80.134.177.253",
+    city: "Krefeld",
+    country: "DE",
+    timezone: "Asia/Shanghai",
+    language: "zh-CN",
+    screenWidth: 1366,
+    screenHeight: 1366,
+    pageViewCount: 1,
+    totalUsageSeconds: 7,
+    funnelReached: ["character_opened"],
+  }),
+  "Chinese traveler in DE (zh + square) must not flag",
+);
+
+assert(
+  isDatacenterHeadlessProbePayload({
+    ip: "80.134.177.253",
+    city: "Krefeld",
+    country: "DE",
+    timezone: "Asia/Shanghai",
+    language: "en-US",
+    screenWidth: 1920,
+    screenHeight: 1080,
+    pageViewCount: 1,
+    totalUsageSeconds: 7,
+    funnelReached: ["character_opened"],
+  }),
+  "DE + Asia/Shanghai + en 1920x1080 should flag (proxy farm)",
+);
+
+assert(
+  isDatacenterHeadlessProbePayload({
+    ip: "37.111.194.84",
+    city: "Dhaka",
+    country: "BD",
+    timezone: "Asia/Shanghai",
+    language: "en-US",
+    screenWidth: 1920,
+    screenHeight: 1080,
+    pageViewCount: 1,
+    totalUsageSeconds: 23,
+    funnelReached: ["character_opened"],
+    entryPath: "/discover/the_jealousies_of_a_country_town_se/characters/victurnien",
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+  }),
+  "BD + Asia/Shanghai + en 1920x1080 should flag",
+);
+
+assert(
+  isDatacenterHeadlessProbePayload({
+    city: "Houston",
+    country: "US",
+    timezone: "Asia/Shanghai",
+    language: "en-US",
+    screenWidth: 1920,
+    screenHeight: 1080,
+    pageViewCount: 1,
+    totalUsageSeconds: 33,
+    funnelReached: ["character_opened"],
+    entryPath: "/discover/dr_wortle_s_school_se/characters/dr_wortle",
+  }),
+  "US + Asia/Shanghai + en 1920x1080 33s should flag",
+);
+
+assert(
+  !isDatacenterHeadlessProbePayload({
+    city: "Shanghai",
+    country: "CN",
+    timezone: "Asia/Shanghai",
+    language: "en-US",
+    screenWidth: 1366,
+    screenHeight: 1366,
+    pageViewCount: 1,
+    totalUsageSeconds: 7,
+    funnelReached: ["character_opened"],
+  }),
+  "CN geo + Asia/Shanghai + en square must not flag via non-CN rule",
+);
+
 // Oct 2026 LogicWeb / Ashburn X11 Linux PT-timezone blog farm.
 assert(
   isDatacenterHeadlessProbePayload({
@@ -303,7 +691,60 @@ assert(
   "Real Mac in LA must not flag on TZ+screen alone",
 );
 
-// Fortaleza: 16s slipped the old 15s gate — strong mismatch allows ≤30s.
+// Oct 2026 MX Querétaro + UTC + X11 1920×1080 (LATAM was outside UTC country list).
+assert(
+  isDatacenterHeadlessProbePayload({
+    ip: "187.243.192.244",
+    city: "Santiago de Querétaro",
+    country: "MX",
+    timezone: "UTC",
+    language: "en-US",
+    screenWidth: 1920,
+    screenHeight: 1080,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["discover_opened"],
+    userAgent:
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+  }),
+  "MX + UTC + X11 Linux must flag",
+);
+
+assert(
+  !isDatacenterHeadlessProbePayload({
+    city: "Santiago de Querétaro",
+    country: "MX",
+    timezone: "America/Mexico_City",
+    language: "es-MX",
+    screenWidth: 1920,
+    screenHeight: 1080,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["discover_opened"],
+    userAgent:
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+  }),
+  "MX Linux with local TZ must not flag on screen alone",
+);
+
+assert(
+  !isDatacenterHeadlessProbePayload({
+    city: "Santiago de Querétaro",
+    country: "MX",
+    timezone: "UTC",
+    language: "es-MX",
+    screenWidth: 1920,
+    screenHeight: 1080,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["discover_opened"],
+    userAgent:
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+  }),
+  "MX + UTC + es locale must not flag",
+);
+
+// Fortaleza: 16s slipped the old 15s gate — strong mismatch allows ≤45s.
 assert(
   isDatacenterHeadlessProbePayload({
     ip: "201.20.90.179",
@@ -334,10 +775,98 @@ assert(
     screenWidth: 1920,
     screenHeight: 1080,
     pageViewCount: 1,
-    totalUsageSeconds: 45,
+    totalUsageSeconds: 60,
     funnelReached: ["character_opened"],
   }),
-  "BR + Asia/Shanghai with 45s usage must not flag",
+  "BR + Asia/Shanghai with 60s usage must not flag",
+);
+
+const shanghaiPreviewFarm = {
+  country: "BO",
+  city: "La Paz",
+  timezone: "Asia/Shanghai",
+  language: "en-US",
+  screenWidth: 1920,
+  screenHeight: 1080,
+  pageViewCount: 1,
+  totalUsageSeconds: 90,
+  funnelReached: ["reader_opened", "reader_engaged", "preview_reader_opened"],
+};
+
+assert(
+  isDatacenterHeadlessProbePayload(
+    {
+      ...shanghaiPreviewFarm,
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",
+    },
+    { isSensitivePath: true },
+  ),
+  "Sensitive Shanghai/en/non-CN Edge 120 must not age out after reader engagement",
+);
+
+assert(
+  isDatacenterHeadlessProbePayload(
+    {
+      ...shanghaiPreviewFarm,
+      country: "TN",
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0",
+    },
+    { isSensitivePath: true },
+  ),
+  "Sensitive Shanghai/en/non-CN Firefox 120 must flag",
+);
+
+assert(
+  datacenterHeadlessProbeReason(
+    {
+      ...shanghaiPreviewFarm,
+      country: "CA",
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:121.0) Gecko/20100101 Firefox/121.0",
+    },
+    { isSensitivePath: true },
+  )?.includes("proxy farm"),
+  "High-confidence China-TZ proxy reason should be available to consumers",
+);
+
+assert(
+  !isDatacenterHeadlessProbePayload(
+    {
+      ...shanghaiPreviewFarm,
+      country: "CN",
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0",
+    },
+    { isSensitivePath: true },
+  ),
+  "CN geo must remain exempt from the China-TZ proxy-farm detector",
+);
+
+assert(
+  !isDatacenterHeadlessProbePayload(
+    {
+      ...shanghaiPreviewFarm,
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0",
+    },
+    { isSensitivePath: false },
+  ),
+  "A non-sensitive path must not use the persistent China-TZ farm signal",
+);
+
+assert(
+  !isDatacenterHeadlessProbePayload(
+    {
+      ...shanghaiPreviewFarm,
+      signedIn: true,
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0",
+    },
+    { isSensitivePath: true },
+  ),
+  "Signed-in visitors remain exempt from the China-TZ proxy-farm detector",
 );
 
 assert(
@@ -739,6 +1268,226 @@ assert(
     { isShallow: true },
   ) != null,
   "opts.isShallow override works for cloud locale probe",
+);
+
+// Oct 2026 GCP → Washington DC Mac Chrome/116 farm (rotated 34.x IPs).
+const gcpWashingtonUa =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36";
+
+assert(
+  isDatacenterHeadlessProbePayload({
+    ip: "34.181.254.28",
+    city: "Washington",
+    country: "US",
+    timezone: "UTC",
+    language: "en-US",
+    screenWidth: 1280,
+    screenHeight: 1024,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["home_viewed", "page_view"],
+    entryPath: "/",
+    userAgent: gcpWashingtonUa,
+  }),
+  "GCP Washington UTC 1280x1024 Chrome/116 must flag",
+);
+
+assert(
+  isDatacenterHeadlessProbePayload({
+    ip: "34.21.19.157",
+    city: "Washington",
+    country: "US",
+    timezone: "UTC",
+    language: "en-US",
+    screenWidth: 1920,
+    screenHeight: 1080,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["home_viewed", "page_view"],
+    entryPath: "/",
+    userAgent: gcpWashingtonUa,
+  }),
+  "GCP Washington UTC stale Catalina Chrome (rotated screen) must flag",
+);
+
+assert(
+  datacenterHeadlessProbeReason({
+    ip: "34.181.254.28",
+    city: "Austin",
+    country: "US",
+    timezone: "UTC",
+    language: "en-US",
+    screenWidth: 1280,
+    screenHeight: 1024,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["home_viewed", "page_view"],
+    userAgent: gcpWashingtonUa,
+  }) === "UTC headless desktop probe",
+  "UTC + 1280x1024 alone must flag via headless screen list",
+);
+
+assert(
+  !isDatacenterHeadlessProbePayload({
+    city: "Washington",
+    country: "US",
+    timezone: "America/New_York",
+    language: "en-US",
+    screenWidth: 1512,
+    screenHeight: 982,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["home_viewed", "page_view"],
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+  }),
+  "Real DC MacBook (local TZ, modern Chrome) must not flag",
+);
+
+assert(
+  !isDatacenterHeadlessProbePayload({
+    city: "Austin",
+    country: "US",
+    timezone: "America/Chicago",
+    language: "en-US",
+    screenWidth: 1280,
+    screenHeight: 1024,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["home_viewed", "page_view"],
+    userAgent: gcpWashingtonUa,
+  }),
+  "Local-TZ 1280x1024 without DC/UTC corroboration must not flag",
+);
+
+// Oct 2026 Ace Data Centers San Jose / Cogent NYC Linux aarch64 Chrome farm.
+const aceSanJoseUa =
+  "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36";
+
+assert(
+  datacenterHeadlessProbeReason({
+    ip: "23.27.145.157",
+    city: "San Jose",
+    country: "US",
+    region: "CA",
+    timezone: "UTC",
+    language: "en-US",
+    screenWidth: 1600,
+    screenHeight: 1200,
+    pageViewCount: 1,
+    totalUsageSeconds: 6,
+    funnelReached: ["home_viewed"],
+    entryPath: "/",
+    userAgent: aceSanJoseUa,
+  }) === "UTC X11 Linux probe from US geo",
+  "US + UTC + X11 Linux aarch64 1600x1200 must flag",
+);
+
+assert(
+  datacenterHeadlessProbeReason({
+    ip: "149.57.180.151",
+    city: "New York City",
+    country: "US",
+    region: "NY",
+    timezone: "UTC",
+    language: "en-US",
+    screenWidth: 1600,
+    screenHeight: 1200,
+    pageViewCount: 1,
+    totalUsageSeconds: 8,
+    funnelReached: ["home_viewed"],
+    entryPath: "/",
+    userAgent: aceSanJoseUa,
+  }) === "UTC X11 Linux probe from US geo",
+  "NYC Cogent twin of Ace San Jose farm must flag",
+);
+
+assert(
+  datacenterHeadlessProbeReason({
+    city: "Austin",
+    country: "US",
+    timezone: "UTC",
+    language: "en-US",
+    screenWidth: 1600,
+    screenHeight: 1200,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["home_viewed", "page_view"],
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+  }) === "UTC headless desktop probe",
+  "UTC + 1600x1200 (no X11) must flag via headless screen list",
+);
+
+assert(
+  !isDatacenterHeadlessProbePayload({
+    city: "San Jose",
+    country: "US",
+    timezone: "America/Los_Angeles",
+    language: "en-US",
+    screenWidth: 1600,
+    screenHeight: 1200,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["home_viewed", "page_view"],
+    userAgent: aceSanJoseUa,
+  }),
+  "San Jose residential X11 with local PT TZ must not flag",
+);
+
+// Oct 2026 Cisco OpenDNS / Umbrella Reston POP (ET geo + PT browser TZ).
+assert(
+  datacenterHeadlessProbeReason({
+    ip: "146.112.163.41",
+    city: "Reston",
+    country: "US",
+    region: "VA",
+    timezone: "America/Los_Angeles",
+    language: "en-US",
+    screenWidth: 1920,
+    screenHeight: 1080,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["home_viewed"],
+    entryPath: "/",
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  }) === "US East Coast OpenDNS POP + Pacific TZ probe",
+  "Reston OpenDNS + America/Los_Angeles shallow must flag",
+);
+
+assert(
+  !isDatacenterHeadlessProbePayload({
+    city: "Reston",
+    country: "US",
+    timezone: "America/New_York",
+    language: "en-US",
+    screenWidth: 1920,
+    screenHeight: 1080,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["home_viewed", "page_view"],
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  }),
+  "Reston resident on Eastern TZ must not flag",
+);
+
+assert(
+  !isDatacenterHeadlessProbePayload({
+    city: "Reston",
+    country: "US",
+    timezone: "America/Los_Angeles",
+    language: "en-US",
+    screenWidth: 1920,
+    screenHeight: 1080,
+    pageViewCount: 3,
+    totalUsageSeconds: 120,
+    funnelReached: ["home_viewed", "discover_opened", "book_detail_opened"],
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  }),
+  "Engaged Reston+PT session (corp OpenDNS) must not flag",
 );
 
 console.log("farmfence web probe checks passed");

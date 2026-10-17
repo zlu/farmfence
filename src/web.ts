@@ -6,21 +6,57 @@
  * with POSIX locales, Boardman device-farm geo, Anyang-si UTC English,
  * zh-CN desktop scrapers on Tencent/Aceville egress).
  *
- * Requires a shallow / low-usage visit. Does not cover cross-visitor
- * burst clustering — that needs a window of rows and stays in the app.
+ * Most rules require a shallow / low-usage visit. Synthetic timezone
+ * `Etc/Unknown` and `@posix` locale never appear on real browsers, so those
+ * flags ignore guest-preview milestones (`reader_engaged`, etc.). Does not
+ * cover cross-visitor burst clustering — that needs a window of rows and
+ * stays in the app.
  *
  * Ashburn *city* alone is never a signal (people live there); only
- * Boardman / The Dalles city, or Ashburn+UTC/headless corroboration.
- * zh-CN alone is never a signal (diaspora / VPN users).
+ * Boardman / The Dalles / Falkenstein city, or Ashburn+UTC/headless
+ * corroboration. zh-CN alone is never a signal (diaspora / VPN users).
  */
 
 import { isCnCloudHostingIp, isHuaweiCloudIp, isTencentCloudIp } from "./datacenter.js";
 
+const EXPLICIT_AUTOMATION_UA =
+  /lightpanda|headless(?:chrome)?|chrome-lighthouse|phantomjs|selenium|playwright|puppeteer|webdriver|cypress|dataprovider|semrush|ahrefs|mj12bot|dotbot|petalbot/i;
+
+/** User agents that explicitly identify browser automation or scraping tools. */
+export function isAutomatedBrowserUserAgent(
+  userAgent: string | null | undefined,
+): boolean {
+  return Boolean(userAgent && EXPLICIT_AUTOMATION_UA.test(userAgent));
+}
+
 const HEADLESS_PROBE_SCREENS = new Set([
   "800x600",
   "1280x720",
+  "1280x1024",
   "600x800",
   "1024x768",
+  // Classic Xvfb / VNC 4:3 — Ace Data Centers US Linux aarch64 farm (Oct 2026).
+  "1600x1200",
+]);
+
+/**
+ * iPad CSS-pixel sizes. Real Macintosh / Windows desktop UAs never report
+ * these — farms pair Mac Safari/Chrome UAs with iPad `window.screen` (Oct
+ * 2026 SG + Asia/Shanghai + zh-CN + 820×1180 character scrapes).
+ */
+const IPAD_PROBE_SCREENS = new Set([
+  "768x1024",
+  "1024x768",
+  "810x1080",
+  "1080x810",
+  "820x1180",
+  "1180x820",
+  "834x1112",
+  "1112x834",
+  "834x1194",
+  "1194x834",
+  "1024x1366",
+  "1366x1024",
 ]);
 
 /** Common real desktop / laptop screen sizes — never treat as randomized. */
@@ -47,12 +83,35 @@ const COMMON_DESKTOP_SCREENS = new Set([
   "3840x2160",
 ]);
 
-/** Cloud-region cities that are never residential web egress. */
+/**
+ * Cloud-region cities that are never (or almost never) residential web
+ * egress. Ashburn / Washington have residents — city alone must never
+ * flag; always pair with UTC / classic headless screen / X11 below.
+ * Washington catches GCP us-east egress that MaxMind maps to DC instead
+ * of Council Bluffs (Oct 2026 Chrome/116 Mac farm).
+ */
 const DATACENTER_PROBE_CITIES = new Set([
   "ashburn",
+  "centreville", // Ashburn-adjacent MaxMind for VA hosting / scrape egress
   "council bluffs",
   "boardman",
   "the dalles",
+  "washington",
+]);
+
+/** East / SE Asia geos where America/* browser TZ is a proxy/farm tell. */
+const EAST_ASIA_AMERICA_TZ_COUNTRIES = new Set([
+  "JP",
+  "KR",
+  "TW",
+  "HK",
+  "SG",
+  "CN",
+  "TH",
+  "VN",
+  "MY",
+  "PH",
+  "ID",
 ]);
 
 /**
@@ -119,6 +178,11 @@ export type WebProbeOptions = {
    * pageViewCount ≤ 2, usage ≤ 15s, and no engaged milestone hints.
    */
   isShallow?: boolean;
+  /**
+   * The app has established that this payload landed on a protected,
+   * byte-heavy or scrape-heavy path (for example an EPUB preview).
+   */
+  isSensitivePath?: boolean;
 };
 
 /**
@@ -140,15 +204,45 @@ function isSearchNoiseMilestone(name: string): boolean {
   );
 }
 
-/** Max visible-tab seconds for strong geo↔TZ mismatch farms (LATAM/SG/US-X11). */
-const STRONG_MISMATCH_MAX_USAGE_SECONDS = 30;
+/** Login-friction probes (home→login→abandon) — not engagement for shallow. */
+function isLoginFrictionMilestone(name: string): boolean {
+  return (
+    name === "login_opened" ||
+    name === "login_abandoned" ||
+    name === "sign_in_opened" ||
+    name === "sign_in_abandoned" ||
+    name === "sign_in_canceled_google" ||
+    name === "sign_in_canceled_apple"
+  );
+}
+
+/** Max visible-tab seconds for strong geo↔TZ mismatch farms (LATAM/non-CN/US-X11).
+ *  Oct 2026 Shanghai proxy wave often sits 30–35s on preview reader. */
+const STRONG_MISMATCH_MAX_USAGE_SECONDS = 45;
+/** Login→support bounces often hit 3 page views / 3 friction milestones. */
+const STRONG_MISMATCH_MAX_PAGE_VIEWS = 4;
+const STRONG_MISMATCH_MAX_MILESTONES = 4;
+
+/**
+ * Geos where Asia/Shanghai (etc.) is a native browser TZ. Outside this set,
+ * China mainland TZ + English + synthetic screen is a cloud/proxy farm tell
+ * (SG/HK Alibaba, VN HCMC, DE Krefeld — Oct 2026 square Mac scrapers).
+ */
+const CHINA_MAINLAND_TZ_NATIVE_COUNTRIES = new Set(["CN"]);
 
 export function isShallowWebProbePayload(
   payload: Record<string, unknown>,
   maxUsageSeconds = 15,
+  opts?: {
+    maxPageViews?: number;
+    maxMilestones?: number;
+    ignoreLoginFriction?: boolean;
+  },
 ): boolean {
+  const maxPageViews = opts?.maxPageViews ?? 2;
+  const maxMilestones = opts?.maxMilestones ?? 2;
   const pv = typeof payload.pageViewCount === "number" ? payload.pageViewCount : 0;
-  if (pv > 2) return false;
+  if (pv > maxPageViews) return false;
   const usage =
     typeof payload.totalUsageSeconds === "number" ? payload.totalUsageSeconds : 0;
   if (usage > maxUsageSeconds) return false;
@@ -158,9 +252,10 @@ export function isShallowWebProbePayload(
       typeof n === "string" &&
       n !== "page_view" &&
       !n.startsWith("cta_") &&
-      !isSearchNoiseMilestone(n),
+      !isSearchNoiseMilestone(n) &&
+      !(opts?.ignoreLoginFriction && isLoginFrictionMilestone(n)),
   );
-  if (milestones.length > 2) return false;
+  if (milestones.length > maxMilestones) return false;
   if (milestones.some((n) => ENGAGED_MILESTONE_HINTS.has(String(n)))) return false;
   return true;
 }
@@ -190,18 +285,65 @@ export function datacenterHeadlessProbeReason(
     typeof sw === "number" && typeof sh === "number" ? `${sw}x${sh}` : "";
   const ua = typeof payload.userAgent === "string" ? payload.userAgent : "";
   const x11Linux = /X11;\s*Linux/i.test(ua);
+  const staleMacCatalinaChrome = isStaleMacCatalinaChromeUa(ua);
+
+  if (isAutomatedBrowserUserAgent(ua)) {
+    return /\blightpanda(?:\/|$)/i.test(ua)
+      ? "Lightpanda headless browser"
+      : "Explicit browser automation / scraper user agent";
+  }
+
+  // High-confidence China-TZ residential-proxy wave on an app-designated
+  // sensitive path. Automatic reader milestones and elapsed time do not clear
+  // it; those are generated by the preview UI itself. The app must opt in so
+  // this stale-browser signal is never applied site-wide.
+  const guestUnsigned =
+    payload.signedIn !== true &&
+    !(typeof payload.email === "string" && payload.email.includes("@"));
+
+  if (
+    opts?.isSensitivePath === true &&
+    guestUnsigned &&
+    country !== "" &&
+    country !== "CN" &&
+    isChinaMainlandTimezone(tz) &&
+    /^en\b/i.test(lang) &&
+    isStaleDesktopProxyFarmUa(ua)
+  ) {
+    return "China browser TZ on non-CN geo + stale desktop browser (proxy farm)";
+  }
+
+  // Synthetic TZ / POSIX locale never appear on real browsers. Guest preview
+  // milestones (reader_engaged after a few seconds of visible time) must not
+  // exempt — Oct 2026 Council Bluffs GCP farm opened Home→Preview→Reader on
+  // Odyssey while still reporting Etc/Unknown + 1024×1024.
+  if (guestUnsigned) {
+    if (/@posix/i.test(lang)) {
+      return "Synthetic POSIX locale (datacenter headless probe)";
+    }
+    if (/^etc\/unknown$/i.test(tz) || /^unknown$/i.test(tz)) {
+      return "Synthetic timezone Etc/Unknown (datacenter probe)";
+    }
+  }
 
   const shallowTight =
     typeof opts?.isShallow === "boolean"
       ? opts.isShallow
       : isShallowWebProbePayload(payload, 15);
-  const shallowMismatch =
-    typeof opts?.isShallow === "boolean"
-      ? opts.isShallow
-      : isShallowWebProbePayload(payload, STRONG_MISMATCH_MAX_USAGE_SECONDS);
+  // Strong geo↔TZ mismatch: own shallow gate (not opts.isShallow). Apps' tight
+  // shallow often rejects login→abandon bounces (3 PVs); those are still probes.
+  const shallowMismatch = isShallowWebProbePayload(
+    payload,
+    STRONG_MISMATCH_MAX_USAGE_SECONDS,
+    {
+      maxPageViews: STRONG_MISMATCH_MAX_PAGE_VIEWS,
+      maxMilestones: STRONG_MISMATCH_MAX_MILESTONES,
+      ignoreLoginFriction: true,
+    },
+  );
 
-  // Strong geo↔TZ mismatch farms: allow up to 30s (Fortaleza scrape hit 16s
-  // and slipped the classic 15s gate).
+  // Strong geo↔TZ mismatch farms: allow up to 45s (Fortaleza 16s; Shanghai
+  // proxy preview wave often 30–35s).
   if (usage <= STRONG_MISMATCH_MAX_USAGE_SECONDS && shallowMismatch) {
     // LATAM residential egress + China mainland browser TZ is a proxy/farm
     // tell. Require classic headless screen or English locale so a real
@@ -214,16 +356,33 @@ export function datacenterHeadlessProbeReason(
       return "China browser TZ on LATAM geo (proxy/headless farm)";
     }
 
-    // SG/HK cloud egress geo with China mainland browser TZ + English +
-    // synthetic screen (perfect/near-square or classic headless).
+    // Non-CN egress with China mainland browser TZ + English. Screen is NOT
+    // required: Oct 2026 wave (~3k/2h) rotates residential proxy geos
+    // (BR/IN/PK/BD/ZA/US/…) with stock 1920×1080 and Asia/Shanghai + en-US
+    // on /reader?preview=1 and /discover SEO. zh travelers still spared.
     if (
-      (country === "SG" || country === "HK") &&
+      country !== "" &&
+      !CHINA_MAINLAND_TZ_NATIVE_COUNTRIES.has(country) &&
       isChinaMainlandTimezone(tz) &&
-      /^en\b/i.test(lang) &&
-      (HEADLESS_PROBE_SCREENS.has(screen) ||
-        isNearSquareDesktopProbeScreen(sw, sh))
+      /^en\b/i.test(lang)
     ) {
-      return "China browser TZ on SG/HK geo (cloud headless farm)";
+      return "China browser TZ on non-CN geo (cloud headless farm)";
+    }
+
+    // Desktop UA + iPad screen: hardware fingerprint lie (Mac/Win UA never
+    // has 820×1180). Catches zh SG/Shanghai farms that drop the `en` tell.
+    if (
+      isDesktopBrowserUa(ua) &&
+      IPAD_PROBE_SCREENS.has(screen) &&
+      (/^zh\b/i.test(lang) || /^en\b/i.test(lang))
+    ) {
+      return "Desktop UA with iPad screen (headless farm)";
+    }
+
+    // iPhone Safari Version/ major ≫ iOS major (Oct 2026 anne-carson farm:
+    // iOS 18_7 + Version/26.6.1). Real iOS Safari Version tracks the OS.
+    if (isSpoofedIphoneSafariVersion(ua)) {
+      return "iPhone Safari Version spoof (ahead of iOS)";
     }
 
     // US + America/Los_Angeles + X11 Linux + 1920×1080 (LogicWeb / Ashburn).
@@ -236,29 +395,92 @@ export function datacenterHeadlessProbeReason(
     ) {
       return "US X11 Linux PT-timezone headless probe";
     }
+
+    // US + Europe/Kiev|Kyiv + X11 Linux (Oct 2026 NYC/Miami scrapers with
+    // Ukrainian browser TZ). Real UA residents use UA geo; US travelers use
+    // America/* — X11+en+Kiev on US egress is the farm tell.
+    if (
+      country === "US" &&
+      /^Europe\/(Kiev|Kyiv)$/i.test(tz) &&
+      x11Linux &&
+      /^en\b/i.test(lang)
+    ) {
+      return "US X11 Linux Europe/Kiev timezone headless probe";
+    }
+
+    // East/SE Asia egress + America/* browser TZ + English (Oct 2026 Osaka
+    // anne-carson farm with America/New_York). Real travelers keep Asia/* TZ.
+    if (
+      EAST_ASIA_AMERICA_TZ_COUNTRIES.has(country) &&
+      /^America\//i.test(tz) &&
+      /^en\b/i.test(lang)
+    ) {
+      return "America browser TZ on East-Asia geo (proxy/headless farm)";
+    }
+
+    // Non-RU geo + Asia/Yekaterinburg + Russian locale (Oct 2026 Madrid X11
+    // Firefox farm). Yekaterinburg is a Russian civil TZ — not EU residential.
+    if (
+      country !== "" &&
+      country !== "RU" &&
+      /^Asia\/Yekaterinburg$/i.test(tz) &&
+      /^ru\b/i.test(lang)
+    ) {
+      return "Asia/Yekaterinburg on non-RU geo (proxy/headless farm)";
+    }
+
+    // LATAM + UTC + X11 Linux + English (Oct 2026 Querétaro Mega Cable scrape).
+    // 1920×1080 is a common real desktop size so UTC+X11+en is the tell —
+    // not the screen alone. es locale / local TZ spared.
+    if (
+      LATAM_COUNTRIES.has(country) &&
+      (/^UTC$/i.test(tz) || /^Etc\/UTC$/i.test(tz)) &&
+      x11Linux &&
+      /^en\b/i.test(lang)
+    ) {
+      return "UTC X11 Linux probe from LATAM geo";
+    }
+
+    // US + UTC + X11 Linux + English (Oct 2026 Ace Data Centers San Jose /
+    // Cogent NYC Linux aarch64 Chrome farm, often 1600×1200). Real US
+    // residents use America/* — UTC+X11+en on US egress is the farm tell.
+    if (
+      country === "US" &&
+      (/^UTC$/i.test(tz) || /^Etc\/UTC$/i.test(tz)) &&
+      x11Linux &&
+      /^en\b/i.test(lang)
+    ) {
+      return "UTC X11 Linux probe from US geo";
+    }
+
+    // Reston / Herndon are Cisco Umbrella / OpenDNS POPs (Eastern Time).
+    // Pacific TZ + English + shallow is a scanner/farm tell — Reston
+    // residents use America/New_York. Engaged CA corp proxy users spared
+    // by the shallow gate.
+    if (
+      (city === "reston" || city === "herndon") &&
+      /^America\/Los_Angeles$/i.test(tz) &&
+      /^en\b/i.test(lang)
+    ) {
+      return "US East Coast OpenDNS POP + Pacific TZ probe";
+    }
   }
 
   if (!shallowTight) return null;
   if (usage > 15) return null;
 
-  if (/@posix/i.test(lang)) {
-    return "Synthetic POSIX locale (datacenter headless probe)";
-  }
-  if (/^etc\/unknown$/i.test(tz) || /^unknown$/i.test(tz)) {
-    return "Synthetic timezone Etc/Unknown (datacenter probe)";
-  }
-
   const utcTz = /^UTC$/i.test(tz) || /^Etc\/UTC$/i.test(tz);
 
-  // Boardman / The Dalles: no residential web egress — shallow alone is enough
-  // (farm images often ship America/Los_Angeles, not UTC).
-  if (city === "boardman" || city === "the dalles") {
+  // Boardman / The Dalles / Falkenstein (Hetzner): no residential web egress —
+  // shallow alone is enough (farm images often ship America/Los_Angeles, not UTC).
+  if (city === "boardman" || city === "the dalles" || city === "falkenstein") {
     const label = typeof payload.city === "string" ? payload.city.trim() : city;
     return `Datacenter city probe (${label})`;
   }
 
-  // Ashburn / Council Bluffs need UTC, classic headless screen, or X11 Linux
-  // corroboration (Ashburn has residents; city alone must never flag).
+  // Ashburn / Centreville / Council Bluffs / Washington need UTC, classic
+  // headless screen, or X11 Linux corroboration (Ashburn/DC have residents;
+  // city alone must never flag).
   if (
     DATACENTER_PROBE_CITIES.has(city) &&
     (utcTz || HEADLESS_PROBE_SCREENS.has(screen) || x11Linux)
@@ -267,26 +489,78 @@ export function datacenterHeadlessProbeReason(
     return `Datacenter city probe (${label})`;
   }
 
+  // UTC + classic headless screen is never residential (800×600 / 1280×720…).
+  // Country list used to gate this; SG/JP farms slipped — screen+UTC is enough.
+  if (utcTz && HEADLESS_PROBE_SCREENS.has(screen)) {
+    return "UTC headless desktop probe";
+  }
+
+  // Stock Puppeteer/Chromedriver UA for years: Mac 10.15 + ancient Chrome
+  // + UTC + English (GCP→DC and SG Vultr farms, Oct 2026).
+  // Real Catalina users are gone; America/New_York MacBooks are spared.
   if (
     utcTz &&
-    HEADLESS_PROBE_SCREENS.has(screen) &&
-    ["US", "CA", "PL", "KR", "FR", "DE", "NL", "BE", "IE"].includes(country)
+    staleMacCatalinaChrome &&
+    /^en\b/i.test(lang) &&
+    (country === "US" ||
+      country === "CA" ||
+      EAST_ASIA_AMERICA_TZ_COUNTRIES.has(country))
   ) {
-    return "UTC headless desktop probe from non-UTC residential geo";
+    return "UTC stale Mac Catalina Chrome probe";
   }
 
   // East-Asia residential geos never ship browser TZ as UTC with an English
-  // locale — catches spaced Anyang-si mobile probes that miss classic
+  // locale — catches spaced Anyang-si / SG mobile probes that miss classic
   // headless screens and the same-IP burst window.
   if (
     utcTz &&
-    ["KR", "JP", "CN", "TW"].includes(country) &&
+    EAST_ASIA_AMERICA_TZ_COUNTRIES.has(country) &&
     /^en\b/i.test(lang)
   ) {
     return "UTC English probe from East-Asia residential geo";
   }
 
   return null;
+}
+
+/**
+ * Default Puppeteer / Selenium Mac UA: Catalina (`10_15_7`) with a Chrome
+ * major that stopped shipping years ago. Threshold is deliberately below
+ * current stable so real outdated laptops on local TZ are not swept in —
+ * this helper is only consulted with UTC (or other strong) corroboration.
+ */
+function isStaleMacCatalinaChromeUa(ua: string): boolean {
+  if (!/Macintosh;\s*Intel Mac OS X 10[_ ]15/i.test(ua)) return false;
+  const m = ua.match(/Chrome\/(\d+)/i);
+  if (!m) return false;
+  const major = Number(m[1]);
+  return Number.isFinite(major) && major > 0 && major <= 120;
+}
+
+/** Desktop browser majors observed in the Oct 2026 EPUB/preview proxy wave. */
+function isStaleDesktopProxyFarmUa(ua: string): boolean {
+  if (!/Windows NT|Macintosh/i.test(ua)) return false;
+  if (/OPR\/|Brave\//i.test(ua)) return false;
+  const version = ua.match(/(?:Chrome|Edg|Firefox)\/(\d+)/i);
+  if (!version) return false;
+  const major = Number(version[1]);
+  return Number.isFinite(major) && major >= 110 && major <= 125;
+}
+
+/**
+ * Mobile Safari `Version/N` tracks iOS major (iOS 18 → Version/18.x).
+ * Farms spoof Version/26+ on iOS 18 UAs. Skip FxiOS/CriOS/etc. (no Version/).
+ */
+function isSpoofedIphoneSafariVersion(ua: string): boolean {
+  if (!/iPhone|iPad|iPod/i.test(ua)) return false;
+  if (/FxiOS|CriOS|EdgiOS|OPiOS|DuckDuckGo/i.test(ua)) return false;
+  const ios = ua.match(/OS (\d+)[._]\d+/i);
+  const ver = ua.match(/Version\/(\d+)/i);
+  if (!ios || !ver) return false;
+  const iosMajor = Number(ios[1]);
+  const safariMajor = Number(ver[1]);
+  if (!Number.isFinite(iosMajor) || !Number.isFinite(safariMajor)) return false;
+  return safariMajor >= iosMajor + 3;
 }
 
 export function isDatacenterHeadlessProbePayload(
