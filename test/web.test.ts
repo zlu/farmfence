@@ -657,6 +657,25 @@ assert(
 
 assert(
   isDatacenterHeadlessProbePayload({
+    ip: "172.121.172.128",
+    city: "Santa Clara",
+    country: "US",
+    timezone: "America/New_York",
+    language: "en-US",
+    screenWidth: 1920,
+    screenHeight: 1080,
+    pageViewCount: 1,
+    totalUsageSeconds: 15,
+    funnelReached: ["chapters_index_opened"],
+    entryPath: "/discover/what_is_to_be_done_se/chapters",
+    userAgent:
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+  }),
+  "Santa Clara + ET TZ + X11 Linux 1920x1080 must flag",
+);
+
+assert(
+  isDatacenterHeadlessProbePayload({
     ip: "136.162.128.120",
     city: "Ashburn",
     country: "US",
@@ -816,6 +835,33 @@ assert(
     { isSensitivePath: true },
   ),
   "Sensitive Shanghai/en/non-CN Firefox 120 must flag",
+);
+
+assert(
+  isDatacenterHeadlessProbePayload(
+    {
+      ip: "95.141.213.93",
+      country: "JO",
+      city: "Amman",
+      timezone: "Asia/Shanghai",
+      language: "en-US",
+      screenWidth: 1920,
+      screenHeight: 1080,
+      pageViewCount: 1,
+      totalUsageSeconds: 25,
+      funnelReached: [
+        "reader_opened",
+        "preview_reader_opened",
+        "preview_lens_opened",
+      ],
+      entryPath:
+        "/reader?bookId=backwater_se&chapter=vii&character=harriett&lens=characters&preview=1",
+      userAgent:
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+    },
+    { isSensitivePath: true },
+  ),
+  "Sensitive Shanghai/en/JO current X11 Linux Chrome must not age out on preview milestones",
 );
 
 assert(
