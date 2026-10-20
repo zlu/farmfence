@@ -1045,6 +1045,10 @@ assert(isTencentCloudIp("49.232.32.8"), "Beijing Tencent");
 assert(isTencentCloudIp("152.136.228.208"), "TENCENT-CN Beijing 152.136/16");
 assert(isTencentCloudIp("101.42.1.26"), "TENCENT-CN Beijing 101.42/15");
 assert(isTencentCloudIp("101.43.255.1"), "TENCENT-CN Beijing 101.43 upper");
+assert(isTencentCloudIp("43.138.0.1"), "TENCENT-CN Guangzhou 43.138 lower");
+assert(isTencentCloudIp("43.139.238.192"), "TENCENT-CN Guangzhou 43.139 probe IP");
+assert(!isTencentCloudIp("43.137.255.1"), "43.137 is outside TENCENT-CN 43.138/15");
+assert(!isTencentCloudIp("43.140.0.1"), "43.140 is outside TENCENT-CN 43.138/15");
 assert(isTencentCloudIp("170.106.75.238"), "Aceville US POP 170.106");
 assert(!isTencentCloudIp("8.8.8.8"), "Google DNS is not Tencent");
 assert(!isTencentCloudIp("101.41.0.1"), "101.41 is outside TENCENT-CN 101.42/15");
@@ -1368,6 +1372,67 @@ assert(
     { isShallow: true },
   ) != null,
   "opts.isShallow override works for cloud locale probe",
+);
+
+// BetterReads visitor a3abb4f3: Tencent Cloud Guangzhou VM spoofing a
+// Nexus 5 (real panel 1080×1920; window.screen would be 360×640 CSS px)
+// while the virtual display reports 1600×1200. CN geo + Asia/Shanghai are
+// superficially consistent, so only the phone-UA ↔ desktop-screen lie and
+// the (newly listed) Tencent CIDR catch it.
+const nexusProbeUa =
+  "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Mobile Safari/537.36";
+const nexusProbePayload = {
+  ip: "43.139.238.192",
+  city: "Guangzhou",
+  country: "CN",
+  timezone: "Asia/Shanghai",
+  language: "en-US",
+  screenWidth: 1600,
+  screenHeight: 1200,
+  pageViewCount: 1,
+  totalUsageSeconds: 0,
+  funnelReached: ["home_viewed", "page_view"],
+  entryPath: "/",
+  userAgent: nexusProbeUa,
+};
+assert(
+  datacenterHeadlessProbeReason(nexusProbePayload) ===
+    "Android phone UA with headless desktop screen (headless farm)",
+  "Nexus 5 UA + 1600x1200 on Tencent Guangzhou must flag",
+);
+assert(
+  isCnCloudHostingIp(nexusProbePayload.ip),
+  "Nexus probe IP must count as CN cloud hosting after 43.138/15",
+);
+assert(
+  !isDatacenterHeadlessProbePayload({
+    ...nexusProbePayload,
+    ip: "203.0.113.10",
+    screenWidth: 360,
+    screenHeight: 640,
+  }),
+  "Real Nexus-class Android phone (360x640 CSS px) must not flag",
+);
+assert(
+  !isDatacenterHeadlessProbePayload({
+    ...nexusProbePayload,
+    userAgent: nexusProbeUa.replace(" Mobile Safari", " Safari"),
+  }),
+  "Android tablet UA (no Mobile token) + 1600x1200 must not flag",
+);
+assert(
+  !isDatacenterHeadlessProbePayload({
+    ...nexusProbePayload,
+    totalUsageSeconds: 60,
+  }),
+  "Android phone UA + headless screen past 45s bound must not flag",
+);
+assert(
+  !isDatacenterHeadlessProbePayload({
+    ...nexusProbePayload,
+    funnelReached: ["home_viewed", "login_completed"],
+  }),
+  "Android phone UA + headless screen with login must not flag",
 );
 
 // Oct 2026 GCP → Washington DC Mac Chrome/116 farm (rotated 34.x IPs).

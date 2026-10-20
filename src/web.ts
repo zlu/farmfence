@@ -4,7 +4,8 @@
  * Single-payload tells for spaced farms that rotate IPs slower than a
  * same-IP burst window (Saginaw Level3, Council Bluffs GCP, Ashburn EC2
  * with POSIX locales, Boardman device-farm geo, Anyang-si UTC English,
- * zh-CN desktop scrapers on Tencent/Aceville egress).
+ * Android phone UAs on desktop Xvfb screens, zh-CN desktop scrapers on
+ * Tencent/Aceville egress).
  *
  * Most rules require a shallow / low-usage visit. Synthetic timezone
  * `Etc/Unknown`, `@posix` locale, and impossible iPhone Safari UAs
@@ -403,6 +404,20 @@ export function datacenterHeadlessProbeReason(
     // iOS 18_7 + Version/26.6.1). Real iOS Safari Version tracks the OS.
     if (isSpoofedIphoneSafariVersion(ua)) {
       return "iPhone Safari Version spoof (ahead of iOS)";
+    }
+
+    // Android phone UA + classic desktop/Xvfb screen: hardware fingerprint
+    // lie (Oct 2026 Tencent Cloud Guangzhou probe: Nexus 5 / Android 6 /
+    // Chrome 99 UA reporting 1600×1200). Phones report small CSS-pixel
+    // screens; 800×600–1600×1200 4:3/5:4 sizes are virtual displays. The
+    // `Mobile` token excludes Android tablets, and the shallowMismatch
+    // gate (≤45s / ≤4 PV, no engaged hints) spares real sessions.
+    if (
+      /Android/i.test(ua) &&
+      /Mobile/i.test(ua) &&
+      HEADLESS_PROBE_SCREENS.has(screen)
+    ) {
+      return "Android phone UA with headless desktop screen (headless farm)";
     }
 
     // US + America/* + X11 Linux + 1920×1080 (LogicWeb / Aceville / residential

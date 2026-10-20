@@ -78,6 +78,8 @@ export function datacenterCrawlerReason(ip: string | null | undefined): string |
 const TENCENT_CLOUD_CIDRS = [
   "1.12.0.0/14",
   "43.128.0.0/13", // Aceville 43.128–43.135 (HK/SG)
+  // TENCENT-CN (AS45090) Guangzhou — APNIC 43.138.0.0–43.139.255.255
+  "43.138.0.0/15",
   "43.152.0.0/14", // 43.152–43.155
   "43.156.0.0/14", // Aceville 43.156–43.159 (gap between /14s above)
   "43.160.0.0/12", // Aceville edge 43.160–43.175 (incl. US / Santa Clara POP)

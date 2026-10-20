@@ -86,7 +86,7 @@ if (isTencentCloudIp(ip)) {
 | Google / Apple review-farm IP + locale↔TZ mismatch or OAuth cancel loop | yes (install path) |
 | Meta / Bing / AWS datacenter crawler IP | yes (web path) |
 | Explicit automation UA (`Lightpanda`, Playwright, Puppeteer, Selenium, etc.) | yes |
-| Web headless probes (`Etc/Unknown`, `@posix`, iPhone Safari Version≫iOS — guest preview does not exempt; UTC+800×600/1280×1024/1600×1200, Boardman/Falkenstein/Centreville city, Washington+UTC, East-Asia UTC English or America/* TZ, ES+Yekaterinburg+ru, LATAM+Asia/Shanghai, non-CN+Asia/Shanghai+en (any screen), LATAM/US+UTC+X11+en, desktop UA + iPad screen, US X11 Linux + America/Los_Angeles + 1920×1080, US X11 Linux + Europe/Kiev, Reston/Herndon + America/Los_Angeles, UTC+stale Mac Catalina Chrome) | `Etc/Unknown` / `@posix` / spoofed Safari always (unsigned, within 45s/≤4 PV bounds); others when shallow |
+| Web headless probes (`Etc/Unknown`, `@posix`, iPhone Safari Version≫iOS — guest preview does not exempt; UTC+800×600/1280×1024/1600×1200, Boardman/Falkenstein/Centreville city, Washington+UTC, East-Asia UTC English or America/* TZ, ES+Yekaterinburg+ru, LATAM+Asia/Shanghai, non-CN+Asia/Shanghai+en (any screen), LATAM/US+UTC+X11+en, desktop UA + iPad screen, Android phone UA + classic headless screen, US X11 Linux + America/Los_Angeles + 1920×1080, US X11 Linux + Europe/Kiev, Reston/Herndon + America/Los_Angeles, UTC+stale Mac Catalina Chrome) | `Etc/Unknown` / `@posix` / spoofed Safari always (unsigned, within 45s/≤4 PV bounds); others when shallow |
 | Sensitive-path China-TZ proxy farm (non-CN + Shanghai TZ + English + stale desktop Chrome/Edge/Firefox 110–125) | yes; does not age out, CN and signed-in exempt |
 | Web zh cloud locale probes (near-square desktop; Tencent/Huawei desktop shallow; Tencent/Huawei mobile shallow) | yes for near-square (guest preview does not exempt); soft path when shallow |
 | Broader Google infra IP alone | no — `isHumanLikeInstall` can clear |
@@ -124,7 +124,11 @@ if (isTencentCloudIp(ip)) {
   geo↔TZ mismatch rules (LATAM/non-CN Shanghai/LATAM-UTC-X11/US-UTC-X11/
   Reston-PT/US-X11) allow up to **45s** usage so slow scrapes (e.g. 16s
   Fortaleza, 33s Shanghai-proxy preview) are not missed; weaker headless
-  rules stay at 15s. **Tencent CIDRs include `101.42.0.0/15`**;
+  rules stay at 15s. **Android phone UA (`Mobile` token) + classic headless
+  screen** (800×600–1600×1200) catches spoofed-device probes whose virtual
+  display leaks through (Nexus 5 UA on 1600×1200, Tencent Guangzhou);
+  tablets and engaged sessions are spared. **Tencent CIDRs include
+  `101.42.0.0/15` and `43.138.0.0/15` (Guangzhou)**;
   **Huawei AS136907** includes `124.243.128.0/18` (SG) and
   `149.232.128.0/19` (MX). Near-square is orientation-agnostic
   (portrait + perfect square). Same-IP / same-UA burst clustering
