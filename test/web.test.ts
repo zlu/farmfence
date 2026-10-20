@@ -370,6 +370,60 @@ assert(
   "Real iPhone iOS 18 + Safari Version/18 must not flag",
 );
 
+// BetterReads visitor e6e8a61d: spoofed iPhone landing directly on guest
+// preview. preview_reader_opened auto-fires there and previously exempted
+// the spoof from the shallow gate, so it appeared as human.
+const spoofedPreviewPayload = {
+  ip: "180.153.197.242",
+  city: "Shanghai",
+  country: "CN",
+  language: "zh-CN",
+  timezone: "Asia/Shanghai",
+  screenWidth: 667,
+  screenHeight: 375,
+  pageViewCount: 1,
+  totalUsageSeconds: 0,
+  funnelReached: ["reader_opened", "preview_reader_opened"],
+  entryPath:
+    "/reader?bookId=short_fiction_26_se&preview=1&chapter=the-festival&lens=chapter&utm_content=chapter_detail",
+  userAgent:
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/26.5 Mobile/15A372 Safari/604.1",
+};
+assert(
+  datacenterHeadlessProbeReason(spoofedPreviewPayload) ===
+    "iPhone Safari Version spoof (ahead of iOS)",
+  "e6e8a61d spoofed iPhone preview landing must flag (preview must not exempt)",
+);
+assert(
+  !isDatacenterHeadlessProbePayload({
+    ...spoofedPreviewPayload,
+    userAgent:
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 26_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1",
+  }),
+  "Real iPhone iOS 26 + Version/26.5 preview landing must not flag",
+);
+assert(
+  !isDatacenterHeadlessProbePayload({
+    ...spoofedPreviewPayload,
+    totalUsageSeconds: 90,
+  }),
+  "Spoofed-UA shape past 45s strong-mismatch bound must not flag",
+);
+assert(
+  !isDatacenterHeadlessProbePayload({
+    ...spoofedPreviewPayload,
+    funnelReached: ["reader_opened", "preview_reader_opened", "book_added"],
+  }),
+  "Spoofed-UA shape with a shelf add must not flag",
+);
+assert(
+  !isDatacenterHeadlessProbePayload({
+    ...spoofedPreviewPayload,
+    signedIn: true,
+  }),
+  "Signed-in spoofed-UA shape must not flag via the early spoof rule",
+);
+
 assert(
   isDatacenterHeadlessProbePayload({
     city: "Anyang-si",

@@ -7,7 +7,8 @@
  * zh-CN desktop scrapers on Tencent/Aceville egress).
  *
  * Most rules require a shallow / low-usage visit. Synthetic timezone
- * `Etc/Unknown` and `@posix` locale never appear on real browsers, so those
+ * `Etc/Unknown`, `@posix` locale, and impossible iPhone Safari UAs
+ * (`Version/` ≫ iOS) never appear on real browsers, so those
  * flags ignore guest-preview milestones (`reader_engaged`, etc.). Does not
  * cover cross-visitor burst clustering — that needs a window of rows and
  * stays in the app.
@@ -327,6 +328,22 @@ export function datacenterHeadlessProbeReason(
     if (/^etc\/unknown$/i.test(tz) || /^unknown$/i.test(tz)) {
       return "Synthetic timezone Etc/Unknown (datacenter probe)";
     }
+    // Impossible Safari UA is likewise synthetic: Version/ major ≥3 ahead
+    // of the iOS major cannot occur on a real device. It must not be
+    // exempted by `preview_reader_opened` / `reader_opened`, which auto-fire
+    // for every guest landing on `/reader?preview=1` (BetterReads visitor
+    // e6e8a61d: iOS 11_0 + Version/26.5, 1 PV, 0s, preview only — slipped
+    // the shallow gate below because that gate treats preview as engaged).
+    // Keep the strong-mismatch bounds and spare hard conversions
+    // (login / signup / shelf add / 5-min use) and signed-in sessions.
+    if (
+      isSpoofedIphoneSafariVersion(ua) &&
+      usage <= STRONG_MISMATCH_MAX_USAGE_SECONDS &&
+      !hasHardEngagement(payload) &&
+      isWithinStrongMismatchMilestoneBounds(payload)
+    ) {
+      return "iPhone Safari Version spoof (ahead of iOS)";
+    }
   }
 
   const shallowTight =
@@ -556,6 +573,53 @@ function isStaleDesktopProxyFarmUa(ua: string): boolean {
  * Mobile Safari `Version/N` tracks iOS major (iOS 18 → Version/18.x).
  * Farms spoof Version/26+ on iOS 18 UAs. Skip FxiOS/CriOS/etc. (no Version/).
  */
+/**
+ * Hard conversions that spare a guest from the early spoof flag. Unlike
+ * `STRONG_ENGAGEMENT_MILESTONES`, this excludes `reader_engaged` /
+ * `preview_reader_opened` — guest preview emits those automatically.
+ */
+const HARD_ENGAGEMENT_MILESTONES = new Set([
+  "login_completed",
+  "signup_completed",
+  "book_added",
+  "bookshelf_opened",
+  "used_5min",
+  "read_5min",
+  "app_opened",
+  "board_published",
+  "project_published",
+]);
+
+function hasHardEngagement(payload: Record<string, unknown>): boolean {
+  const reached = Array.isArray(payload.funnelReached) ? payload.funnelReached : [];
+  return reached.some(
+    (n) => typeof n === "string" && HARD_ENGAGEMENT_MILESTONES.has(n),
+  );
+}
+
+/**
+ * Strong-mismatch volume bounds (page views checked by caller via usage /
+ * pageViewCount in `isShallowWebProbePayload` terms): ≤4 page views and
+ * ≤4 non-noise milestones, counting engaged hints instead of exempting on
+ * them.
+ */
+function isWithinStrongMismatchMilestoneBounds(
+  payload: Record<string, unknown>,
+): boolean {
+  const pv = typeof payload.pageViewCount === "number" ? payload.pageViewCount : 0;
+  if (pv > STRONG_MISMATCH_MAX_PAGE_VIEWS) return false;
+  const reached = Array.isArray(payload.funnelReached) ? payload.funnelReached : [];
+  const milestones = reached.filter(
+    (n) =>
+      typeof n === "string" &&
+      n !== "page_view" &&
+      !n.startsWith("cta_") &&
+      !isSearchNoiseMilestone(n) &&
+      !isLoginFrictionMilestone(n),
+  );
+  return milestones.length <= STRONG_MISMATCH_MAX_MILESTONES;
+}
+
 function isSpoofedIphoneSafariVersion(ua: string): boolean {
   if (!/iPhone|iPad|iPod/i.test(ua)) return false;
   if (/FxiOS|CriOS|EdgiOS|OPiOS|DuckDuckGo/i.test(ua)) return false;
