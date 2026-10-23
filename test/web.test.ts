@@ -1476,20 +1476,27 @@ assert(
 );
 
 assert(
-  datacenterHeadlessProbeReason({
-    ip: "34.181.254.28",
-    city: "Austin",
-    country: "US",
-    timezone: "UTC",
-    language: "en-US",
-    screenWidth: 1280,
-    screenHeight: 1024,
-    pageViewCount: 1,
-    totalUsageSeconds: 0,
-    funnelReached: ["home_viewed", "page_view"],
-    userAgent: gcpWashingtonUa,
-  }) === "UTC headless desktop probe",
-  "UTC + 1280x1024 alone must flag via headless screen list",
+  (() => {
+    const reason = datacenterHeadlessProbeReason({
+      ip: "34.181.254.28",
+      city: "Austin",
+      country: "US",
+      timezone: "UTC",
+      language: "en-US",
+      screenWidth: 1280,
+      screenHeight: 1024,
+      pageViewCount: 1,
+      totalUsageSeconds: 0,
+      funnelReached: ["home_viewed", "page_view"],
+      userAgent: gcpWashingtonUa,
+    });
+    // Prefer TZ↔geo (UTC-on-US); fall through remains "UTC headless desktop probe".
+    return (
+      reason === "UTC headless desktop probe" ||
+      reason?.includes("UTC browser timezone on US geo") === true
+    );
+  })(),
+  "UTC + 1280x1024 alone must flag via headless screen list or UTC-on-US",
 );
 
 assert(
@@ -1529,58 +1536,72 @@ assert(
 const aceSanJoseUa =
   "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36";
 
+function flagsUtcOnUs(reason: string | null): boolean {
+  return (
+    reason === "UTC X11 Linux probe from US geo" ||
+    reason === "UTC headless desktop probe" ||
+    reason?.includes("UTC browser timezone on US geo") === true
+  );
+}
+
 assert(
-  datacenterHeadlessProbeReason({
-    ip: "23.27.145.157",
-    city: "San Jose",
-    country: "US",
-    region: "CA",
-    timezone: "UTC",
-    language: "en-US",
-    screenWidth: 1600,
-    screenHeight: 1200,
-    pageViewCount: 1,
-    totalUsageSeconds: 6,
-    funnelReached: ["home_viewed"],
-    entryPath: "/",
-    userAgent: aceSanJoseUa,
-  }) === "UTC X11 Linux probe from US geo",
+  flagsUtcOnUs(
+    datacenterHeadlessProbeReason({
+      ip: "23.27.145.157",
+      city: "San Jose",
+      country: "US",
+      region: "CA",
+      timezone: "UTC",
+      language: "en-US",
+      screenWidth: 1600,
+      screenHeight: 1200,
+      pageViewCount: 1,
+      totalUsageSeconds: 6,
+      funnelReached: ["home_viewed"],
+      entryPath: "/",
+      userAgent: aceSanJoseUa,
+    }),
+  ),
   "US + UTC + X11 Linux aarch64 1600x1200 must flag",
 );
 
 assert(
-  datacenterHeadlessProbeReason({
-    ip: "149.57.180.151",
-    city: "New York City",
-    country: "US",
-    region: "NY",
-    timezone: "UTC",
-    language: "en-US",
-    screenWidth: 1600,
-    screenHeight: 1200,
-    pageViewCount: 1,
-    totalUsageSeconds: 8,
-    funnelReached: ["home_viewed"],
-    entryPath: "/",
-    userAgent: aceSanJoseUa,
-  }) === "UTC X11 Linux probe from US geo",
+  flagsUtcOnUs(
+    datacenterHeadlessProbeReason({
+      ip: "149.57.180.151",
+      city: "New York City",
+      country: "US",
+      region: "NY",
+      timezone: "UTC",
+      language: "en-US",
+      screenWidth: 1600,
+      screenHeight: 1200,
+      pageViewCount: 1,
+      totalUsageSeconds: 8,
+      funnelReached: ["home_viewed"],
+      entryPath: "/",
+      userAgent: aceSanJoseUa,
+    }),
+  ),
   "NYC Cogent twin of Ace San Jose farm must flag",
 );
 
 assert(
-  datacenterHeadlessProbeReason({
-    city: "Austin",
-    country: "US",
-    timezone: "UTC",
-    language: "en-US",
-    screenWidth: 1600,
-    screenHeight: 1200,
-    pageViewCount: 1,
-    totalUsageSeconds: 0,
-    funnelReached: ["home_viewed", "page_view"],
-    userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
-  }) === "UTC headless desktop probe",
+  flagsUtcOnUs(
+    datacenterHeadlessProbeReason({
+      city: "Austin",
+      country: "US",
+      timezone: "UTC",
+      language: "en-US",
+      screenWidth: 1600,
+      screenHeight: 1200,
+      pageViewCount: 1,
+      totalUsageSeconds: 0,
+      funnelReached: ["home_viewed", "page_view"],
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+    }),
+  ),
   "UTC + 1600x1200 (no X11) must flag via headless screen list",
 );
 
@@ -1653,6 +1674,83 @@ assert(
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
   }),
   "Engaged Reston+PT session (corp OpenDNS) must not flag",
+);
+
+// Oct 23: PH residential egress + spoofed Africa/Maputo + en-US Mac Chrome.
+// Landing was not a deep-link, so app-local deep-link-only gates missed it.
+const phMaputoFarm = {
+  ip: "58.69.220.3",
+  city: "Cabanatuan City",
+  country: "PH",
+  timezone: "Africa/Maputo",
+  language: "en-US",
+  screenWidth: 1440,
+  screenHeight: 900,
+  pageViewCount: 1,
+  totalUsageSeconds: 0,
+  funnelReached: ["home_viewed", "page_view"],
+  entryPath: "/",
+  userAgent:
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+};
+assert(
+  datacenterHeadlessProbeReason(phMaputoFarm)?.includes("Africa/Maputo"),
+  "PH + Africa/Maputo must name the TZ↔geo mismatch",
+);
+assert(
+  isDatacenterHeadlessProbePayload(phMaputoFarm),
+  "PH + Africa/Maputo shallow English visit must flag",
+);
+assert(
+  !isDatacenterHeadlessProbePayload({
+    ...phMaputoFarm,
+    timezone: "Asia/Manila",
+  }),
+  "PH + Asia/Manila must not flag",
+);
+assert(
+  !isDatacenterHeadlessProbePayload({
+    ...phMaputoFarm,
+    funnelReached: ["home_viewed", "reader_engaged"],
+    totalUsageSeconds: 90,
+  }),
+  "Engaged PH visitor with mismatched TZ must not flag",
+);
+// Transatlantic VPN corridor stays soft-exempt (Americas TZ on EU geo).
+assert(
+  !isDatacenterHeadlessProbePayload({
+    ip: "203.0.113.10",
+    country: "GB",
+    city: "London",
+    timezone: "America/Chicago",
+    language: "en-US",
+    screenWidth: 1440,
+    screenHeight: 900,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["home_viewed"],
+    entryPath: "/",
+    userAgent: phMaputoFarm.userAgent,
+  }),
+  "GB + America/Chicago (transatlantic VPN) must not flag on TZ alone",
+);
+assert(
+  isDatacenterHeadlessProbePayload({
+    ip: "154.222.106.115",
+    country: "US",
+    city: "Princeton",
+    timezone: "UTC",
+    language: "en-US",
+    screenWidth: 1920,
+    screenHeight: 1080,
+    pageViewCount: 1,
+    totalUsageSeconds: 0,
+    funnelReached: ["book_detail_opened"],
+    entryPath: "/discover/some_book",
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+  }),
+  "US + UTC Windows book-detail (headless default) must flag without deep-link",
 );
 
 console.log("farmfence web probe checks passed");

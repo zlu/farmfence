@@ -20,6 +20,7 @@
  */
 
 import { isCnCloudHostingIp, isHuaweiCloudIp, isTencentCloudIp } from "./datacenter.js";
+import { tzGeoMismatchFarmReason } from "./tzGeo.js";
 
 const EXPLICIT_AUTOMATION_UA =
   /lightpanda|headless(?:chrome)?|chrome-lighthouse|phantomjs|selenium|playwright|puppeteer|webdriver|cypress|dataprovider|semrush|ahrefs|mj12bot|dotbot|petalbot/i;
@@ -388,6 +389,20 @@ export function datacenterHeadlessProbeReason(
       /^en\b/i.test(lang)
     ) {
       return "China browser TZ on non-CN geo (cloud headless farm)";
+    }
+
+    // Continental TZ↔geo lie after the farm stopped hardcoding Shanghai:
+    // random Africa/* / Asia/* / Oceania/* (or UTC-on-US) on a mismatched
+    // residential egress + English. Landing path does not matter — Oct 23
+    // PH + Africa/Maputo + en-US was counted as human because app-local
+    // deep-link-only gates never fired. Skip Americas↔Europe (common VPN).
+    // Also require shallowTight so an explicit `{ isShallow: false }` from
+    // the app (engaged session) still clears this soft tell.
+    if (shallowTight && /^en\b/i.test(lang)) {
+      const tzGeo = tzGeoMismatchFarmReason(tz, country);
+      if (tzGeo) {
+        return `TZ↔geo mismatch farm (${tzGeo})`;
+      }
     }
 
     // Desktop UA + iPad screen: hardware fingerprint lie (Mac/Win UA never

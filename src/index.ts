@@ -33,3 +33,11 @@ export {
   isShallowWebProbePayload,
   type WebProbeOptions,
 } from "./web.js";
+
+export {
+  isTransatlanticVpnCorridor,
+  isUtcTimezoneName,
+  tzGeoMismatchFarmReason,
+  tzGeoMismatchReason,
+  type TzRegion,
+} from "./tzGeo.js";
